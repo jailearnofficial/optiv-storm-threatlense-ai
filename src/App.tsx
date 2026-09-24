@@ -29,9 +29,7 @@ import {
 import { FileText, ShieldAlert, CheckCircle2, Download, AlertCircle, Network, Cpu, Radio, ChevronDown, ChevronUp } from 'lucide-react';
 
 export default function App() {
-  const [indicator, setIndicator] = useState<string>(
-    'ed01ebf83334a19374d4a77573494f7d87ff9f0f9d37345c3b8c0a88f666e2c8'
-  );
+  const [indicator, setIndicator] = useState<string>('');
   const [selectedType, setSelectedType] = useState<string>('auto');
   const [analystName, setAnalystName] = useState<string>(() => {
     try {
@@ -64,9 +62,6 @@ export default function App() {
         if (data.providers) setProviderHealth(data.providers);
       })
       .catch((err) => console.error('Health check failed:', err));
-
-    // Automatically run initial lookup for the preset sample
-    handleLookup(false);
   }, []);
 
   // Handler for lookup execution
@@ -170,36 +165,14 @@ export default function App() {
     }
   };
 
-  // Select sample from preset list or pivot
-  const handleSelectSample = (sampleIndicator: string, sampleType: IndicatorType | 'auto') => {
-    setIndicator(sampleIndicator);
-    setSelectedType(sampleType);
+  // Pivot indicator investigation
+  const handlePivotIndicator = (newIndicator: string, newType: IndicatorType | 'auto') => {
+    setIndicator(newIndicator);
+    setSelectedType(newType);
     setAnalysis(null);
     setErrorMessage(null);
 
-    // Run lookup on sample immediately
-    setTimeout(() => {
-      fetch('/api/lookup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ indicator: sampleIndicator, type: sampleType })
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.lookup_id) {
-            setEvidence({
-              id: data.lookup_id,
-              indicator: data.indicator,
-              collected_at: data.collected_at,
-              providers: data.providers,
-              related: data.related || { domains: [], ips: [], urls: [], hashes: [] },
-              mitre_hints: data.mitre_hints || [],
-              rule_score: data.rule_score
-            });
-          }
-        })
-        .catch((err) => console.error(err));
-    }, 100);
+    handleLookup(false, undefined, analystName);
   };
 
   // Select from history drawer
@@ -241,7 +214,6 @@ export default function App() {
       {/* Header bar with live provider health dots */}
       <Header
         onOpenHistory={() => setHistoryOpen(true)}
-        onSelectSample={handleSelectSample}
         providerHealth={providerHealth}
       />
 
@@ -273,6 +245,45 @@ export default function App() {
               >
                 Dismiss
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Results Grid: 7 Threat Intel Providers */}
+        {!evidence && !lookupLoading && (
+          <div className="relative z-10 max-w-5xl mx-auto px-4 mt-8">
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-8 text-center backdrop-blur-md">
+              <div className="inline-flex p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 mb-4">
+                <ShieldAlert className="w-8 h-8" />
+              </div>
+              <h2 className="text-lg font-bold text-slate-100 uppercase tracking-wide mb-2">
+                Production Threat Intelligence Console Ready
+              </h2>
+              <p className="text-sm text-slate-400 max-w-xl mx-auto mb-6 leading-relaxed">
+                Enter any live <strong>MD5 / SHA-1 / SHA-256 hash</strong>, <strong>domain</strong>, <strong>public IPv4/IPv6</strong>, or <strong>URL</strong> above to initiate real-time parallel triage across all 7 threat feeds.
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-3xl mx-auto text-left">
+                <div className="p-3 rounded-lg bg-slate-950/70 border border-slate-800/80">
+                  <span className="text-[10px] font-mono text-cyan-400 uppercase font-bold block mb-1">Hash Support</span>
+                  <span className="text-xs text-slate-300 font-mono">MD5, SHA1, SHA256</span>
+                  <p className="text-[11px] text-slate-500 mt-1">VT, Hybrid Analysis, MalwareBazaar, OTX, urlscan</p>
+                </div>
+                <div className="p-3 rounded-lg bg-slate-950/70 border border-slate-800/80">
+                  <span className="text-[10px] font-mono text-cyan-400 uppercase font-bold block mb-1">Domain Support</span>
+                  <span className="text-xs text-slate-300 font-mono">FQDN (e.g. google.com)</span>
+                  <p className="text-[11px] text-slate-500 mt-1">VT, Hybrid Analysis, URLhaus, urlscan, OTX</p>
+                </div>
+                <div className="p-3 rounded-lg bg-slate-950/70 border border-slate-800/80">
+                  <span className="text-[10px] font-mono text-cyan-400 uppercase font-bold block mb-1">IP Support</span>
+                  <span className="text-xs text-slate-300 font-mono">Public IPv4 & IPv6</span>
+                  <p className="text-[11px] text-slate-500 mt-1">AbuseIPDB, VT, urlscan, OTX, URLhaus</p>
+                </div>
+                <div className="p-3 rounded-lg bg-slate-950/70 border border-slate-800/80">
+                  <span className="text-[10px] font-mono text-cyan-400 uppercase font-bold block mb-1">URL Support</span>
+                  <span className="text-xs text-slate-300 font-mono">HTTP & HTTPS endpoints</span>
+                  <p className="text-[11px] text-slate-500 mt-1">URLhaus, urlscan.io, VT, OTX</p>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -329,7 +340,7 @@ export default function App() {
                 provider={evidence.providers.find((p) => p.name === 'virustotal')!}
                 indicator={evidence.indicator.normalized}
                 indicatorType={evidence.indicator.type}
-                onPivotIndicator={(newInd, type) => handleSelectSample(newInd, type || 'auto')}
+                onPivotIndicator={(newInd, type) => handlePivotIndicator(newInd, type || 'auto')}
               />
             )}
           </div>
@@ -359,7 +370,7 @@ export default function App() {
                 provider={evidence.providers.find((p) => p.name === 'hybrid_analysis')!}
                 indicator={evidence.indicator.normalized}
                 indicatorType={evidence.indicator.type}
-                onPivotIndicator={(newInd, type) => handleSelectSample(newInd, type || 'auto')}
+                onPivotIndicator={(newInd, type) => handlePivotIndicator(newInd, type || 'auto')}
               />
             )}
           </div>
@@ -389,7 +400,7 @@ export default function App() {
                 provider={evidence.providers.find((p) => p.name === 'alienvault_otx')!}
                 indicator={evidence.indicator.normalized}
                 indicatorType={evidence.indicator.type}
-                onPivotIndicator={(newInd, type) => handleSelectSample(newInd, type || 'auto')}
+                onPivotIndicator={(newInd, type) => handlePivotIndicator(newInd, type || 'auto')}
               />
             )}
           </div>

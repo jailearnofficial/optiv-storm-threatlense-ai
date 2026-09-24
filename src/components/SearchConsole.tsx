@@ -103,14 +103,13 @@ export const SearchConsole: React.FC<SearchConsoleProps> = ({
   }, [showAnalystModal, analystName]);
 
   const initiateSearchOrSubmission = (submitMode: boolean, file?: File) => {
-    // If analyst name is missing, prompt to collect it first
-    if (!analystName.trim()) {
+    // If submitMode with file upload and analyst name is missing, prompt modal
+    if (submitMode && file && !analystName.trim()) {
       setPendingAction({ submitMode, file });
       setShowAnalystModal(true);
       return;
     }
 
-    // Otherwise continue what is set so far
     if (submitMode && file) {
       onLookup(true, file);
     } else if (indicator.trim()) {

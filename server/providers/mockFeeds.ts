@@ -371,15 +371,5 @@ export const KNOWN_SAMPLES: KnownSample[] = [
 ];
 
 export function findKnownSample(indicator: string): KnownSample | null {
-  const norm = indicator.trim().toLowerCase();
-  for (const sample of KNOWN_SAMPLES) {
-    if (sample.indicator.toLowerCase() === norm) {
-      return sample;
-    }
-    // Also match URL without trailing slash or protocol
-    if (norm.includes(sample.indicator.toLowerCase()) || sample.indicator.toLowerCase().includes(norm)) {
-      if (norm.length > 5) return sample;
-    }
-  }
   return null;
 }
