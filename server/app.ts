@@ -55,7 +55,16 @@ export function createApp() {
   });
 
   // Authentication Endpoints for @optiv.com and @gmail.com
-  app.post('/api/auth/register', (req: Request, res: Response) => {
+  app.get('/api/auth/smtp-status', (req: Request, res: Response) => {
+    res.json({
+      configured: Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS),
+      host: process.env.SMTP_HOST || null,
+      user: process.env.SMTP_USER || null
+    });
+  });
+
+  // Step 1: Initiate registration (sends 6-digit OTP code to email)
+  app.post('/api/auth/register/initiate', async (req: Request, res: Response) => {
     const { email, password, displayName } = req.body || {};
     try {
       if (!email || typeof email !== 'string') {
@@ -66,13 +75,71 @@ export function createApp() {
         res.status(400).json({ error: 'Password is required.' });
         return;
       }
-      const user = userAuth.register(email, password, displayName);
-      res.status(201).json({ success: true, user });
+      const result = await userAuth.initiateRegistration(email, password, displayName);
+      res.json({ success: true, ...result });
     } catch (err: any) {
-      res.status(400).json({ error: err.message || 'Registration failed.' });
+      res.status(400).json({ error: err.message || 'Registration initiation failed.' });
     }
   });
 
+  // Step 2: Confirm registration with 6-digit OTP code
+  app.post('/api/auth/register/confirm', (req: Request, res: Response) => {
+    const { email, code } = req.body || {};
+    try {
+      if (!email || typeof email !== 'string') {
+        res.status(400).json({ error: 'Email address is required.' });
+        return;
+      }
+      if (!code || typeof code !== 'string') {
+        res.status(400).json({ error: '6-digit verification code is required.' });
+        return;
+      }
+      const user = userAuth.confirmRegistration(email, code);
+      res.status(201).json({ success: true, user });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message || 'Verification failed.' });
+    }
+  });
+
+  // Step 1: Initiate Password Reset (sends 6-digit OTP code to email)
+  app.post('/api/auth/reset/initiate', async (req: Request, res: Response) => {
+    const { email } = req.body || {};
+    try {
+      if (!email || typeof email !== 'string') {
+        res.status(400).json({ error: 'Email address is required.' });
+        return;
+      }
+      const result = await userAuth.initiatePasswordReset(email);
+      res.json({ success: true, ...result });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message || 'Password reset request failed.' });
+    }
+  });
+
+  // Step 2: Confirm Password Reset with 6-digit OTP code and new password
+  app.post('/api/auth/reset/confirm', (req: Request, res: Response) => {
+    const { email, code, newPassword } = req.body || {};
+    try {
+      if (!email || typeof email !== 'string') {
+        res.status(400).json({ error: 'Email address is required.' });
+        return;
+      }
+      if (!code || typeof code !== 'string') {
+        res.status(400).json({ error: 'Verification code is required.' });
+        return;
+      }
+      if (!newPassword || typeof newPassword !== 'string') {
+        res.status(400).json({ error: 'New security password is required.' });
+        return;
+      }
+      const result = userAuth.confirmPasswordReset(email, code, newPassword);
+      res.json(result);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message || 'Password reset confirmation failed.' });
+    }
+  });
+
+  // Standard Email Login
   app.post('/api/auth/login', (req: Request, res: Response) => {
     const { email, password } = req.body || {};
     try {

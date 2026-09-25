@@ -20,6 +20,19 @@ export interface AuthUser {
   photoURL?: string | null;
 }
 
+export interface SmtpStatus {
+  configured: boolean;
+  host: string | null;
+  user: string | null;
+}
+
+export interface VerificationResult {
+  message: string;
+  email: string;
+  previewCode?: string;
+  sentViaSmtp: boolean;
+}
+
 // Validation helper: strictly accept @optiv.com and @gmail.com
 export function isAllowedEmail(email?: string | null): boolean {
   if (!email) return false;
@@ -34,11 +47,15 @@ interface AuthContextType {
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
-  registerWithEmail: (email: string, pass: string, name: string) => Promise<void>;
+  initiateRegistration: (email: string, pass: string, name: string) => Promise<VerificationResult>;
+  confirmRegistration: (email: string, code: string) => Promise<void>;
+  initiatePasswordReset: (email: string) => Promise<VerificationResult>;
+  confirmPasswordReset: (email: string, code: string, newPass: string) => Promise<string>;
   signOut: () => Promise<void>;
   authError: string | null;
   isUnauthorizedDomain: boolean;
   currentHost: string;
+  smtpStatus: SmtpStatus;
   clearAuthError: () => void;
 }
 
@@ -47,11 +64,15 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   signInWithGoogle: async () => {},
   signInWithEmail: async () => {},
-  registerWithEmail: async () => {},
+  initiateRegistration: async () => ({ message: '', email: '', sentViaSmtp: false }),
+  confirmRegistration: async () => {},
+  initiatePasswordReset: async () => ({ message: '', email: '', sentViaSmtp: false }),
+  confirmPasswordReset: async () => '',
   signOut: async () => {},
   authError: null,
   isUnauthorizedDomain: false,
   currentHost: '',
+  smtpStatus: { configured: false, host: null, user: null },
   clearAuthError: () => {}
 });
 
@@ -63,11 +84,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [authError, setAuthError] = useState<string | null>(null);
   const [isUnauthorizedDomain, setIsUnauthorizedDomain] = useState<boolean>(false);
   const [currentHost, setCurrentHost] = useState<string>('');
+  const [smtpStatus, setSmtpStatus] = useState<SmtpStatus>({
+    configured: false,
+    host: null,
+    user: null
+  });
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setCurrentHost(window.location.hostname);
     }
+
+    // Check SMTP status
+    fetch('/api/auth/smtp-status')
+      .then((res) => res.json())
+      .then((data) => {
+        setSmtpStatus({
+          configured: Boolean(data.configured),
+          host: data.host,
+          user: data.user
+        });
+      })
+      .catch(() => {});
 
     // 1. Check for stored analyst session
     let restoredLocalUser: AuthUser | null = null;
@@ -107,7 +145,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.error('Failed to sync user profile:', e);
         }
       } else {
-        // If no Firebase user, retain the stored local user session if present
         if (!restoredLocalUser) {
           setUser(null);
         }
@@ -163,7 +200,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      // Authenticate against our backend auth provider
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -187,7 +223,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem(STORAGE_KEY, JSON.stringify(authenticatedAnalyst));
       } catch {}
 
-      // Background optional Firebase Auth attempt (if enabled)
+      // Optional background sync
       signInWithEmailAndPassword(auth, cleanEmail, pass).catch(() => {});
     } catch (err: unknown) {
       console.error('Email sign-in error:', err);
@@ -197,7 +233,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const registerWithEmail = async (email: string, pass: string, name: string) => {
+  const initiateRegistration = async (email: string, pass: string, name: string): Promise<VerificationResult> => {
     setAuthError(null);
     setIsUnauthorizedDomain(false);
 
@@ -215,8 +251,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      // Register with backend auth provider
-      const response = await fetch('/api/auth/register', {
+      const response = await fetch('/api/auth/register/initiate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -228,7 +263,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const data = await response.json();
       if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Registration failed.');
+        throw new Error(data.error || 'Registration initiation failed.');
+      }
+
+      return {
+        message: data.message,
+        email: data.email,
+        previewCode: data.mailStatus?.previewCode,
+        sentViaSmtp: Boolean(data.mailStatus?.sentViaSmtp)
+      };
+    } catch (err: unknown) {
+      console.error('Initiate registration error:', err);
+      const errMsg = err instanceof Error ? err.message : 'Failed to send verification code.';
+      setAuthError(errMsg);
+      throw err;
+    }
+  };
+
+  const confirmRegistration = async (email: string, code: string): Promise<void> => {
+    setAuthError(null);
+    setIsUnauthorizedDomain(false);
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanCode = code.trim();
+
+    if (!cleanCode || cleanCode.length < 6) {
+      const err = 'Please enter the complete 6-digit verification code.';
+      setAuthError(err);
+      throw new Error(err);
+    }
+
+    try {
+      const response = await fetch('/api/auth/register/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail, code: cleanCode })
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Verification failed. Please check the code.');
       }
 
       const authenticatedAnalyst: AuthUser = {
@@ -242,18 +316,86 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(authenticatedAnalyst));
       } catch {}
-
-      // Background optional Firebase Auth registration (if enabled)
-      createUserWithEmailAndPassword(auth, cleanEmail, pass)
-        .then(async (cred) => {
-          if (name.trim()) {
-            await updateProfile(cred.user, { displayName: name.trim() });
-          }
-        })
-        .catch(() => {});
     } catch (err: unknown) {
-      console.error('Email registration error:', err);
-      const errMsg = err instanceof Error ? err.message : 'Registration failed.';
+      console.error('Confirm registration error:', err);
+      const errMsg = err instanceof Error ? err.message : 'Registration verification failed.';
+      setAuthError(errMsg);
+      throw err;
+    }
+  };
+
+  const initiatePasswordReset = async (email: string): Promise<VerificationResult> => {
+    setAuthError(null);
+    setIsUnauthorizedDomain(false);
+
+    const cleanEmail = email.trim().toLowerCase();
+    if (!isAllowedEmail(cleanEmail)) {
+      const err = 'Access Denied: Only @optiv.com or @gmail.com email addresses are authorized.';
+      setAuthError(err);
+      throw new Error(err);
+    }
+
+    try {
+      const response = await fetch('/api/auth/reset/initiate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail })
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Password reset request failed.');
+      }
+
+      return {
+        message: data.message,
+        email: data.email,
+        previewCode: data.mailStatus?.previewCode,
+        sentViaSmtp: Boolean(data.mailStatus?.sentViaSmtp)
+      };
+    } catch (err: unknown) {
+      console.error('Initiate password reset error:', err);
+      const errMsg = err instanceof Error ? err.message : 'Failed to request password reset code.';
+      setAuthError(errMsg);
+      throw err;
+    }
+  };
+
+  const confirmPasswordReset = async (email: string, code: string, newPass: string): Promise<string> => {
+    setAuthError(null);
+    setIsUnauthorizedDomain(false);
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanCode = code.trim();
+
+    if (!cleanCode || cleanCode.length < 6) {
+      const err = 'Please enter the complete 6-digit verification code.';
+      setAuthError(err);
+      throw new Error(err);
+    }
+
+    if (!newPass || newPass.length < 6) {
+      const err = 'Security requirement: New password must be at least 6 characters.';
+      setAuthError(err);
+      throw new Error(err);
+    }
+
+    try {
+      const response = await fetch('/api/auth/reset/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail, code: cleanCode, newPassword: newPass })
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Password reset failed.');
+      }
+
+      return data.message || 'Password reset successful.';
+    } catch (err: unknown) {
+      console.error('Confirm password reset error:', err);
+      const errMsg = err instanceof Error ? err.message : 'Password reset failed.';
       setAuthError(errMsg);
       throw err;
     }
@@ -280,11 +422,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         signInWithGoogle,
         signInWithEmail,
-        registerWithEmail,
+        initiateRegistration,
+        confirmRegistration,
+        initiatePasswordReset,
+        confirmPasswordReset,
         signOut,
         authError,
         isUnauthorizedDomain,
         currentHost,
+        smtpStatus,
         clearAuthError: () => {
           setAuthError(null);
           setIsUnauthorizedDomain(false);
