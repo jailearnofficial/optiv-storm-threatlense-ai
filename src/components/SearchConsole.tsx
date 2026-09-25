@@ -277,7 +277,7 @@ export const SearchConsole: React.FC<SearchConsoleProps> = ({
                 type="text"
                 value={indicator}
                 onChange={(e) => setIndicator(e.target.value)}
-                placeholder="Enter target file hash, domain, IP, URL, or browse a sample..."
+                placeholder="Enter target file hash, domain, IP, or URL..."
                 className="w-full bg-transparent text-slate-100 placeholder-slate-500 font-mono text-sm md:text-base px-3 py-2 outline-none border-none focus:ring-0"
                 disabled={loading}
               />
@@ -289,18 +289,6 @@ export const SearchConsole: React.FC<SearchConsoleProps> = ({
                 </span>
               )}
             </div>
-
-            {/* Direct Browse Sample File Button */}
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              title="Browse and parse sample file for VirusTotal, Hybrid Analysis, AlienVault OTX"
-              className="px-3.5 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 border border-slate-700 text-xs font-mono font-medium transition-colors cursor-pointer flex items-center justify-center gap-1.5 shrink-0 shadow-sm"
-            >
-              <UploadCloud className="w-4 h-4 text-cyan-400" />
-              <span className="hidden sm:inline">Browse Sample File</span>
-              <span className="sm:hidden">File</span>
-            </button>
 
             {/* Lookup / Investigate Button */}
             <button
