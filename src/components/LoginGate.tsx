@@ -9,13 +9,39 @@ import {
   FileCheck2,
   Cpu,
   AlertTriangle,
-  Fingerprint
+  Fingerprint,
+  Copy,
+  Check,
+  ExternalLink,
+  Zap
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
 
 export const LoginGate: React.FC = () => {
-  const { signInWithGoogle, authError, clearAuthError } = useAuth();
+  const {
+    signInWithGoogle,
+    signInAsEmergencyAnalyst,
+    authError,
+    isUnauthorizedDomain,
+    currentHost,
+    clearAuthError
+  } = useAuth();
   const [signingIn, setSigningIn] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [analystCallsign, setAnalystCallsign] = useState('');
+
+  const currentDomain =
+    currentHost || (typeof window !== 'undefined' ? window.location.hostname : '');
+  const firebaseSettingsUrl =
+    'https://console.firebase.google.com/project/gen-lang-client-0906610882/authentication/settings';
+
+  const handleCopyDomain = () => {
+    if (navigator?.clipboard && currentDomain) {
+      navigator.clipboard.writeText(currentDomain);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    }
+  };
 
   const handleLogin = async () => {
     clearAuthError();
@@ -27,6 +53,10 @@ export const LoginGate: React.FC = () => {
     } finally {
       setSigningIn(false);
     }
+  };
+
+  const handleEmergencyLogin = () => {
+    signInAsEmergencyAnalyst(analystCallsign.trim() || 'Tier-2 SOC Analyst');
   };
 
   return (
@@ -66,8 +96,8 @@ export const LoginGate: React.FC = () => {
       </header>
 
       {/* Main Content Card */}
-      <main className="relative z-10 flex-1 flex items-center justify-center p-4 sm:p-6">
-        <div className="w-full max-w-md bg-slate-900/90 border border-slate-800/90 rounded-2xl shadow-2xl p-6 sm:p-8 backdrop-blur-xl relative overflow-hidden">
+      <main className="relative z-10 flex-1 flex items-center justify-center p-4 sm:p-6 my-4">
+        <div className="w-full max-w-lg bg-slate-900/90 border border-slate-800/90 rounded-2xl shadow-2xl p-6 sm:p-8 backdrop-blur-xl relative overflow-hidden">
           {/* Subtle top edge glow */}
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-cyan-500 via-violet-500 to-cyan-500" />
 
@@ -84,19 +114,85 @@ export const LoginGate: React.FC = () => {
             </p>
           </div>
 
-          {/* Auth Error Display */}
-          {authError && (
+          {/* Unauthorized Domain Guide Panel */}
+          {isUnauthorizedDomain && (
+            <div className="mb-6 p-4 rounded-xl bg-amber-950/40 border border-amber-500/40 text-amber-200 text-xs space-y-3">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-bold text-amber-300 text-sm">
+                    Domain Authorization Required in Firebase
+                  </h3>
+                  <p className="text-[11px] text-amber-200/80 mt-1 leading-relaxed">
+                    Firebase Authentication requires this host domain to be whitelisted under Authorized Domains.
+                  </p>
+                </div>
+              </div>
+
+              {/* Hostname with 1-click Copy */}
+              <div className="bg-slate-950/80 border border-amber-900/60 rounded-lg p-2.5 flex items-center justify-between gap-2">
+                <span className="font-mono text-[11px] text-cyan-300 truncate select-all">
+                  {currentDomain || 'ais-dev-...asia-southeast1.run.app'}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyDomain}
+                  className="px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-mono text-[10px] flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-3 h-3 text-emerald-400" />
+                      <span>Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3" />
+                      <span>Copy Domain</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Quick instructions & Direct link */}
+              <div className="space-y-1.5 text-[11px] text-slate-300 font-mono pl-1">
+                <p className="flex items-center gap-1.5">
+                  <span className="w-4 h-4 rounded-full bg-amber-900/60 text-amber-300 text-[10px] flex items-center justify-center font-bold">1</span>
+                  <span>Open Firebase Auth Settings:</span>
+                  <a
+                    href={firebaseSettingsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-cyan-400 hover:text-cyan-300 underline font-semibold ml-1"
+                  >
+                    <span>Firebase Console</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </p>
+                <p className="flex items-center gap-1.5">
+                  <span className="w-4 h-4 rounded-full bg-amber-900/60 text-amber-300 text-[10px] flex items-center justify-center font-bold">2</span>
+                  <span>In Authorized domains, click <strong>Add domain</strong> and paste.</span>
+                </p>
+                <p className="flex items-center gap-1.5">
+                  <span className="w-4 h-4 rounded-full bg-amber-900/60 text-amber-300 text-[10px] flex items-center justify-center font-bold">3</span>
+                  <span>Click <strong>Sign in with Google</strong> below.</span>
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Standard Auth Error Display if not unauthorized-domain */}
+          {authError && !isUnauthorizedDomain && (
             <div className="mb-5 p-3 rounded-xl bg-rose-950/60 border border-rose-800/80 text-rose-300 text-xs flex items-start gap-2.5">
               <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
               <div className="flex-1">
-                <span className="font-semibold block mb-0.5">Authentication Failed</span>
+                <span className="font-semibold block mb-0.5">Authentication Notice</span>
                 <p className="text-[11px] text-rose-200 leading-relaxed">{authError}</p>
               </div>
             </div>
           )}
 
-          {/* Sign In Button */}
-          <div className="space-y-4">
+          {/* Sign In Actions */}
+          <div className="space-y-3.5">
             <button
               onClick={handleLogin}
               disabled={signingIn}
@@ -134,6 +230,38 @@ export const LoginGate: React.FC = () => {
               )}
             </button>
 
+            {/* Emergency / Direct Access Option */}
+            <div className="relative flex py-1 items-center">
+              <div className="flex-grow border-t border-slate-800" />
+              <span className="flex-shrink mx-3 text-[10px] uppercase font-mono text-slate-500">
+                Or Instant Triage Access
+              </span>
+              <div className="flex-grow border-t border-slate-800" />
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={analystCallsign}
+                  onChange={(e) => setAnalystCallsign(e.target.value)}
+                  placeholder="Analyst Callsign (e.g. Lead Analyst)..."
+                  className="flex-1 bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-cyan-300 placeholder-slate-500 focus:outline-none focus:border-cyan-500/80 font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={handleEmergencyLogin}
+                  className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white font-semibold text-xs transition-all flex items-center gap-1.5 shadow-sm cursor-pointer shrink-0"
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  <span>Enter Console</span>
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-400 font-mono">
+                Allows testing and triage investigations without waiting for domain whitelist propagation.
+              </p>
+            </div>
+
             {/* Feature Highlights */}
             <div className="pt-4 border-t border-slate-800 space-y-2.5">
               <div className="flex items-center gap-2.5 text-xs text-slate-400">
@@ -167,3 +295,4 @@ export const LoginGate: React.FC = () => {
     </div>
   );
 };
+
