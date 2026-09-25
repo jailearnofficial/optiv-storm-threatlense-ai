@@ -10,11 +10,9 @@ import {
   syncUserProfile
 } from '../lib/firebase.js';
 
-// Validation helper: strictly accept @optiv.com and @gmail.com
+// Helper for user validation
 export function isAllowedEmail(email?: string | null): boolean {
-  if (!email) return false;
-  const clean = email.trim().toLowerCase();
-  return clean.endsWith('@optiv.com') || clean.endsWith('@gmail.com');
+  return Boolean(email && email.trim().length > 0);
 }
 
 export const isOptivEmail = isAllowedEmail;
@@ -60,17 +58,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        // Enforce @optiv.com or @gmail.com restriction
-        if (!isAllowedEmail(currentUser.email)) {
-          await fbSignOut(auth);
-          setUser(null);
-          setAuthError(
-            `Access Denied: Only @optiv.com or @gmail.com email addresses are authorized. Attempted logon: ${currentUser.email || 'Unknown'}`
-          );
-          setLoading(false);
-          return;
-        }
-
         setUser(currentUser);
         try {
           await syncUserProfile(currentUser);
@@ -94,14 +81,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const result = await signInWithPopup(auth, googleProvider);
 
       if (result.user) {
-        if (!isAllowedEmail(result.user.email)) {
-          await fbSignOut(auth);
-          setUser(null);
-          const rejectedMsg = `Access Denied: Only @optiv.com or @gmail.com accounts are authorized. Logged-in Google account: ${result.user.email}`;
-          setAuthError(rejectedMsg);
-          throw new Error(rejectedMsg);
-        }
-
         await syncUserProfile(result.user);
       }
     } catch (err: unknown) {
@@ -115,7 +94,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         );
       } else if (errMsg.includes('popup-closed-by-user')) {
         setAuthError('Authentication window closed before completion.');
-      } else if (!errMsg.includes('Access Denied: Only')) {
+      } else {
         setAuthError(errMsg);
       }
       throw err;

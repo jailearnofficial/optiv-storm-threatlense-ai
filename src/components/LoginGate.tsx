@@ -11,8 +11,7 @@ import {
   Fingerprint,
   Copy,
   Check,
-  ExternalLink,
-  Building2
+  ExternalLink
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
 
@@ -84,8 +83,8 @@ export const LoginGate: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-[11px] font-mono text-cyan-400">
-          <Building2 className="w-3 h-3 text-cyan-400" />
-          <span>OPTIV & GMAIL AUTHORIZED</span>
+          <ShieldCheck className="w-3 h-3 text-cyan-400" />
+          <span>GOOGLE IDENTITY AUTHORIZED</span>
         </div>
       </header>
 
@@ -105,7 +104,7 @@ export const LoginGate: React.FC = () => {
             </h1>
             <div className="mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-cyan-950/70 border border-cyan-800/60 text-[11px] font-mono text-cyan-300">
               <Lock className="w-3 h-3 text-cyan-400" />
-              <span>@optiv.com & @gmail.com accounts authorized</span>
+              <span>SOC Analyst Authentication</span>
             </div>
           </div>
 
@@ -212,14 +211,6 @@ export const LoginGate: React.FC = () => {
                 </>
               )}
             </button>
-
-            <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 text-[11px] text-slate-400 font-mono text-center">
-              <span>Accepts </span>
-              <strong className="text-cyan-300">@optiv.com</strong>
-              <span> and </span>
-              <strong className="text-cyan-300">@gmail.com</strong>
-              <span> Google accounts.</span>
-            </div>
           </div>
 
           {/* Security Features Checklist */}
@@ -230,7 +221,7 @@ export const LoginGate: React.FC = () => {
             </div>
             <div className="flex items-center gap-2.5 text-xs text-slate-400">
               <Radio className="w-4 h-4 text-violet-400 shrink-0" />
-              <span>Strict Domain Whitelist Enforcement</span>
+              <span>OAuth 2.0 Security Architecture</span>
             </div>
             <div className="flex items-center gap-2.5 text-xs text-slate-400">
               <Cpu className="w-4 h-4 text-cyan-400 shrink-0" />
