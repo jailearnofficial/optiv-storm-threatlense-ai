@@ -3,6 +3,9 @@ import {
   auth,
   googleProvider,
   signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
   fbSignOut,
   onAuthStateChanged,
   User,
@@ -10,19 +13,19 @@ import {
   syncUserProfile
 } from '../lib/firebase.js';
 
-export interface AppUser {
-  uid: string;
-  email: string | null;
-  displayName: string | null;
-  photoURL: string | null;
-  isDemo?: boolean;
+// Validation helper: strictly accept optiv.com (and developer admin account)
+export function isOptivEmail(email?: string | null): boolean {
+  if (!email) return false;
+  const clean = email.trim().toLowerCase();
+  return clean.endsWith('@optiv.com') || clean === 'jai.learn.official@gmail.com';
 }
 
 interface AuthContextType {
-  user: User | AppUser | null;
+  user: User | null;
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
-  signInAsEmergencyAnalyst: (customName?: string) => void;
+  signInWithEmail: (email: string, pass: string) => Promise<void>;
+  registerWithEmail: (email: string, pass: string, name: string) => Promise<void>;
   signOut: () => Promise<void>;
   authError: string | null;
   isUnauthorizedDomain: boolean;
@@ -34,7 +37,8 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   signInWithGoogle: async () => {},
-  signInAsEmergencyAnalyst: () => {},
+  signInWithEmail: async () => {},
+  registerWithEmail: async () => {},
   signOut: async () => {},
   authError: null,
   isUnauthorizedDomain: false,
@@ -43,7 +47,7 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | AppUser | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isUnauthorizedDomain, setIsUnauthorizedDomain] = useState<boolean>(false);
@@ -54,17 +58,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCurrentHost(window.location.hostname);
     }
 
-    // Check if there was a saved emergency session in sessionStorage
+    // Clear any previous legacy session storage
     try {
-      const savedSession = sessionStorage.getItem('soc_analyst_session');
-      if (savedSession) {
-        const parsed = JSON.parse(savedSession);
-        if (parsed?.uid) {
-          setUser(parsed);
-          setLoading(false);
-          return;
-        }
-      }
+      sessionStorage.removeItem('soc_analyst_session');
     } catch {}
 
     // Test Firestore connection on boot
@@ -73,13 +69,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
       if (currentUser) {
+        // Enforce strict @optiv.com restriction
+        if (!isOptivEmail(currentUser.email)) {
+          await fbSignOut(auth);
+          setUser(null);
+          setAuthError(
+            `Access Denied: Only @optiv.com corporate email addresses are authorized. Attempted logon: ${currentUser.email || 'Unknown'}`
+          );
+          setLoading(false);
+          return;
+        }
+
+        setUser(currentUser);
         try {
           await syncUserProfile(currentUser);
         } catch (e) {
           console.error('Failed to sync user profile:', e);
         }
+      } else {
+        setUser(null);
       }
       setLoading(false);
     });
@@ -93,22 +102,66 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const result = await signInWithPopup(auth, googleProvider);
       if (result.user) {
-        try {
-          sessionStorage.removeItem('soc_analyst_session');
-        } catch {}
+        if (!isOptivEmail(result.user.email)) {
+          await fbSignOut(auth);
+          setUser(null);
+          const rejectedMsg = `Access Denied: Only @optiv.com accounts are authorized. Logged-in Google account: ${result.user.email}`;
+          setAuthError(rejectedMsg);
+          throw new Error(rejectedMsg);
+        }
         await syncUserProfile(result.user);
       }
     } catch (err: unknown) {
-      console.error('Authentication error:', err);
-      const errMsg = err instanceof Error ? err.message : 'Sign-in failed. Please try again.';
+      console.error('Google Authentication error:', err);
+      const errMsg = err instanceof Error ? err.message : 'Google sign-in failed.';
       
       if (errMsg.includes('auth/unauthorized-domain')) {
         setIsUnauthorizedDomain(true);
         setAuthError(
-          `Domain Unauthorized: "${window.location.hostname}" is not yet in the Firebase Authorized Domains list. Add it to Firebase Console or use Quick Analyst Access.`
+          `Domain Unauthorized: "${window.location.hostname}" is not yet in the Firebase Authorized Domains list. Add it to Firebase Console settings.`
         );
       } else if (errMsg.includes('popup-closed-by-user')) {
-        setAuthError('Authentication prompt closed. Please complete Google sign-in to access the SOC console.');
+        setAuthError('Authentication window closed before completion.');
+      } else if (!errMsg.includes('Access Denied: Only @optiv.com')) {
+        setAuthError(errMsg);
+      }
+      throw err;
+    }
+  };
+
+  const signInWithEmail = async (email: string, pass: string) => {
+    setAuthError(null);
+    setIsUnauthorizedDomain(false);
+
+    const cleanEmail = email.trim();
+    if (!isOptivEmail(cleanEmail)) {
+      const err = 'Access Denied: Only @optiv.com corporate email addresses are permitted.';
+      setAuthError(err);
+      throw new Error(err);
+    }
+
+    try {
+      const result = await signInWithEmailAndPassword(auth, cleanEmail, pass);
+      if (result.user) {
+        if (!isOptivEmail(result.user.email)) {
+          await fbSignOut(auth);
+          setUser(null);
+          const err = `Access Denied: Only @optiv.com accounts are authorized.`;
+          setAuthError(err);
+          throw new Error(err);
+        }
+        await syncUserProfile(result.user);
+      }
+    } catch (err: unknown) {
+      console.error('Email sign-in error:', err);
+      const errMsg = err instanceof Error ? err.message : 'Authentication failed.';
+
+      if (errMsg.includes('auth/operation-not-allowed')) {
+        setAuthError(
+          'Email/Password sign-in is not yet toggled ON in your Firebase project. Please enable Email/Password provider in the Firebase Console (Authentication > Sign-in method).'
+        );
+      } else if (errMsg.includes('auth/invalid-credential') || errMsg.includes('auth/user-not-found') || errMsg.includes('auth/wrong-password')) {
+        setAuthError('Invalid credentials. If this is your first time logging in with this @optiv.com email, please click "Register New Optiv Analyst".');
       } else {
         setAuthError(errMsg);
       }
@@ -116,28 +169,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signInAsEmergencyAnalyst = (customName?: string) => {
-    const demoAnalyst: AppUser = {
-      uid: 'soc-analyst-' + Math.random().toString(36).substring(2, 9),
-      email: 'analyst.tier2@optiv-storm.internal',
-      displayName: customName || 'Tier-2 SOC Analyst',
-      photoURL: '',
-      isDemo: true
-    };
-    setUser(demoAnalyst);
+  const registerWithEmail = async (email: string, pass: string, name: string) => {
     setAuthError(null);
     setIsUnauthorizedDomain(false);
+
+    const cleanEmail = email.trim();
+    if (!isOptivEmail(cleanEmail)) {
+      const err = 'Access Denied: Only @optiv.com corporate email addresses can be registered.';
+      setAuthError(err);
+      throw new Error(err);
+    }
+
+    if (!pass || pass.length < 6) {
+      const err = 'Security requirement: Password must be at least 6 characters.';
+      setAuthError(err);
+      throw new Error(err);
+    }
+
     try {
-      sessionStorage.setItem('soc_analyst_session', JSON.stringify(demoAnalyst));
-    } catch {}
+      const result = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
+      if (result.user) {
+        if (name.trim()) {
+          await updateProfile(result.user, { displayName: name.trim() });
+        }
+        await syncUserProfile(result.user);
+      }
+    } catch (err: unknown) {
+      console.error('Email registration error:', err);
+      const errMsg = err instanceof Error ? err.message : 'Registration failed.';
+
+      if (errMsg.includes('auth/operation-not-allowed')) {
+        setAuthError(
+          'Email/Password provider is not yet enabled in Firebase Console. Go to Firebase Console > Authentication > Sign-in method and enable Email/Password.'
+        );
+      } else if (errMsg.includes('auth/email-already-in-use')) {
+        setAuthError('An account with this @optiv.com email already exists. Please switch to "Sign In".');
+      } else {
+        setAuthError(errMsg);
+      }
+      throw err;
+    }
   };
 
   const signOut = async () => {
     setAuthError(null);
     setIsUnauthorizedDomain(false);
-    try {
-      sessionStorage.removeItem('soc_analyst_session');
-    } catch {}
     try {
       await fbSignOut(auth);
     } catch (err: unknown) {
@@ -152,7 +228,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         loading,
         signInWithGoogle,
-        signInAsEmergencyAnalyst,
+        signInWithEmail,
+        registerWithEmail,
         signOut,
         authError,
         isUnauthorizedDomain,
@@ -169,4 +246,3 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 };
 
 export const useAuth = () => useContext(AuthContext);
-

@@ -6,34 +6,48 @@ import {
   Sparkles,
   ArrowRight,
   Radio,
-  FileCheck2,
   Cpu,
   AlertTriangle,
   Fingerprint,
   Copy,
   Check,
   ExternalLink,
-  Zap
+  Mail,
+  KeyRound,
+  User,
+  Building2
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext.js';
+import { useAuth, isOptivEmail } from '../context/AuthContext.js';
 
 export const LoginGate: React.FC = () => {
   const {
     signInWithGoogle,
-    signInAsEmergencyAnalyst,
+    signInWithEmail,
+    registerWithEmail,
     authError,
     isUnauthorizedDomain,
     currentHost,
     clearAuthError
   } = useAuth();
-  const [signingIn, setSigningIn] = useState(false);
+
+  // Mode: 'google' | 'email'
+  const [authMethod, setAuthMethod] = useState<'google' | 'email'>('google');
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [analystCallsign, setAnalystCallsign] = useState('');
+
+  // Form fields for email login
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [analystName, setAnalystName] = useState('');
+  const [localEmailError, setLocalEmailError] = useState('');
 
   const currentDomain =
     currentHost || (typeof window !== 'undefined' ? window.location.hostname : '');
   const firebaseSettingsUrl =
     'https://console.firebase.google.com/project/gen-lang-client-0906610882/authentication/settings';
+  const firebaseProvidersUrl =
+    'https://console.firebase.google.com/project/gen-lang-client-0906610882/authentication/providers';
 
   const handleCopyDomain = () => {
     if (navigator?.clipboard && currentDomain) {
@@ -43,21 +57,55 @@ export const LoginGate: React.FC = () => {
     }
   };
 
-  const handleLogin = async () => {
+  const handleGoogleLogin = async () => {
     clearAuthError();
-    setSigningIn(true);
+    setLocalEmailError('');
+    setSubmitting(true);
     try {
       await signInWithGoogle();
     } catch {
-      // Error handled in auth context
+      // Handled in auth context
     } finally {
-      setSigningIn(false);
+      setSubmitting(false);
     }
   };
 
-  const handleEmergencyLogin = () => {
-    signInAsEmergencyAnalyst(analystCallsign.trim() || 'Tier-2 SOC Analyst');
+  const handleEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    clearAuthError();
+    setLocalEmailError('');
+
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
+      setLocalEmailError('Please enter your @optiv.com email address.');
+      return;
+    }
+
+    if (!isOptivEmail(cleanEmail)) {
+      setLocalEmailError('Only corporate email addresses ending in @optiv.com are accepted.');
+      return;
+    }
+
+    if (!password || password.length < 6) {
+      setLocalEmailError('Password must be at least 6 characters.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      if (isRegistering) {
+        await registerWithEmail(cleanEmail, password, analystName.trim());
+      } else {
+        await signInWithEmail(cleanEmail, password);
+      }
+    } catch {
+      // Handled in context
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  const isEmailDomainValid = !email || isOptivEmail(email);
 
   return (
     <div className="min-h-screen bg-[#070A10] text-slate-100 flex flex-col justify-between selection:bg-cyan-500 selection:text-black relative overflow-hidden font-sans">
@@ -84,14 +132,14 @@ export const LoginGate: React.FC = () => {
               </span>
             </div>
             <p className="text-[11px] text-slate-400 font-mono">
-              SOC Security Gateway & Access Control
+              SOC Security Gateway · Authorized Optiv Personnel Only
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-[11px] font-mono text-cyan-400">
-          <Lock className="w-3 h-3 text-cyan-400" />
-          <span>FIREBASE AUTH SECURED</span>
+          <Building2 className="w-3 h-3 text-cyan-400" />
+          <span>OPTIV.COM RESTRICTED</span>
         </div>
       </header>
 
@@ -102,29 +150,85 @@ export const LoginGate: React.FC = () => {
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-cyan-500 via-violet-500 to-cyan-500" />
 
           {/* Badge & Title */}
-          <div className="text-center mb-6">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 mb-4 shadow-[0_0_20px_rgba(34,211,238,0.15)]">
+          <div className="text-center mb-5">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 mb-3 shadow-[0_0_20px_rgba(34,211,238,0.15)]">
               <Fingerprint className="w-7 h-7 text-cyan-400" />
             </div>
             <h1 className="text-xl sm:text-2xl font-black text-slate-100 uppercase tracking-wider">
               Analyst Access Portal
             </h1>
-            <p className="text-xs text-slate-400 mt-1.5 font-mono">
-              Verify identity to access unified threat intelligence and AI synthesis
-            </p>
+            <div className="mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-cyan-950/70 border border-cyan-800/60 text-[11px] font-mono text-cyan-300">
+              <Lock className="w-3 h-3 text-cyan-400" />
+              <span>Only @optiv.com credentials accepted</span>
+            </div>
           </div>
 
-          {/* Unauthorized Domain Guide Panel */}
-          {isUnauthorizedDomain && (
-            <div className="mb-6 p-4 rounded-xl bg-amber-950/40 border border-amber-500/40 text-amber-200 text-xs space-y-3">
+          {/* Auth Method Selector Tabs */}
+          <div className="flex items-center rounded-xl bg-slate-950/80 p-1 border border-slate-800 mb-5">
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMethod('google');
+                clearAuthError();
+                setLocalEmailError('');
+              }}
+              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                authMethod === 'google'
+                  ? 'bg-slate-800 text-cyan-300 shadow-sm border border-slate-700'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {/* Google SVG */}
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
+                <path
+                  fill="#4285F4"
+                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                />
+              </svg>
+              <span>Sign in with Google</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMethod('email');
+                clearAuthError();
+                setLocalEmailError('');
+              }}
+              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                authMethod === 'email'
+                  ? 'bg-slate-800 text-cyan-300 shadow-sm border border-slate-700'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Mail className="w-3.5 h-3.5" />
+              <span>Optiv Email Login</span>
+            </button>
+          </div>
+
+          {/* Unauthorized Domain Guide Panel (Google Flow) */}
+          {isUnauthorizedDomain && authMethod === 'google' && (
+            <div className="mb-5 p-4 rounded-xl bg-amber-950/40 border border-amber-500/40 text-amber-200 text-xs space-y-3">
               <div className="flex items-start gap-2.5">
                 <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
                 <div>
                   <h3 className="font-bold text-amber-300 text-sm">
-                    Domain Authorization Required in Firebase
+                    Domain Whitelist Required for Google Sign-In
                   </h3>
                   <p className="text-[11px] text-amber-200/80 mt-1 leading-relaxed">
-                    Firebase Authentication requires this host domain to be whitelisted under Authorized Domains.
+                    Add this app domain to your Firebase Authorized Domains to enable Google Sign-In, or switch to the <strong>Optiv Email Login</strong> tab above.
                   </p>
                 </div>
               </div>
@@ -132,7 +236,7 @@ export const LoginGate: React.FC = () => {
               {/* Hostname with 1-click Copy */}
               <div className="bg-slate-950/80 border border-amber-900/60 rounded-lg p-2.5 flex items-center justify-between gap-2">
                 <span className="font-mono text-[11px] text-cyan-300 truncate select-all">
-                  {currentDomain || 'ais-dev-...asia-southeast1.run.app'}
+                  {currentDomain}
                 </span>
                 <button
                   type="button"
@@ -153,136 +257,221 @@ export const LoginGate: React.FC = () => {
                 </button>
               </div>
 
-              {/* Quick instructions & Direct link */}
-              <div className="space-y-1.5 text-[11px] text-slate-300 font-mono pl-1">
-                <p className="flex items-center gap-1.5">
-                  <span className="w-4 h-4 rounded-full bg-amber-900/60 text-amber-300 text-[10px] flex items-center justify-center font-bold">1</span>
-                  <span>Open Firebase Auth Settings:</span>
-                  <a
-                    href={firebaseSettingsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-cyan-400 hover:text-cyan-300 underline font-semibold ml-1"
-                  >
-                    <span>Firebase Console</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </p>
-                <p className="flex items-center gap-1.5">
-                  <span className="w-4 h-4 rounded-full bg-amber-900/60 text-amber-300 text-[10px] flex items-center justify-center font-bold">2</span>
-                  <span>In Authorized domains, click <strong>Add domain</strong> and paste.</span>
-                </p>
-                <p className="flex items-center gap-1.5">
-                  <span className="w-4 h-4 rounded-full bg-amber-900/60 text-amber-300 text-[10px] flex items-center justify-center font-bold">3</span>
-                  <span>Click <strong>Sign in with Google</strong> below.</span>
-                </p>
+              {/* Direct Link */}
+              <div className="text-[11px] text-slate-300 font-mono">
+                <a
+                  href={firebaseSettingsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-cyan-400 hover:text-cyan-300 underline font-semibold"
+                >
+                  <span>Open Firebase Auth Settings (Add Domain)</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
               </div>
             </div>
           )}
 
-          {/* Standard Auth Error Display if not unauthorized-domain */}
-          {authError && !isUnauthorizedDomain && (
-            <div className="mb-5 p-3 rounded-xl bg-rose-950/60 border border-rose-800/80 text-rose-300 text-xs flex items-start gap-2.5">
+          {/* Error Message Display */}
+          {(authError || localEmailError) && (!isUnauthorizedDomain || authMethod === 'email') && (
+            <div className="mb-5 p-3.5 rounded-xl bg-rose-950/60 border border-rose-800/80 text-rose-300 text-xs flex items-start gap-2.5">
               <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
               <div className="flex-1">
-                <span className="font-semibold block mb-0.5">Authentication Notice</span>
-                <p className="text-[11px] text-rose-200 leading-relaxed">{authError}</p>
+                <span className="font-semibold block mb-0.5">Authorization Error</span>
+                <p className="text-[11px] text-rose-200 leading-relaxed">
+                  {localEmailError || authError}
+                </p>
+                {authError?.includes('Firebase Console') && (
+                  <a
+                    href={firebaseProvidersUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-cyan-300 underline mt-1.5 text-[10px] font-mono"
+                  >
+                    <span>Enable Email/Password in Firebase Console</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
               </div>
             </div>
           )}
 
-          {/* Sign In Actions */}
-          <div className="space-y-3.5">
-            <button
-              onClick={handleLogin}
-              disabled={signingIn}
-              className="w-full py-3.5 px-4 rounded-xl bg-slate-100 hover:bg-white text-slate-900 font-semibold text-sm transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_25px_rgba(34,211,238,0.3)] flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed group"
-            >
-              {signingIn ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
-                  <span>Authorizing SOC Session...</span>
-                </>
-              ) : (
-                <>
-                  {/* Google SVG Icon */}
-                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                    <path
-                      fill="#4285F4"
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                    />
-                    <path
-                      fill="#34A853"
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                    />
-                    <path
-                      fill="#FBBC05"
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                    />
-                    <path
-                      fill="#EA4335"
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                    />
-                  </svg>
-                  <span>Sign in with Google</span>
-                  <ArrowRight className="w-4 h-4 text-slate-700 group-hover:translate-x-0.5 transition-transform" />
-                </>
-              )}
-            </button>
+          {/* METHOD 1: Google Sign In */}
+          {authMethod === 'google' && (
+            <div className="space-y-4">
+              <button
+                type="button"
+                onClick={handleGoogleLogin}
+                disabled={submitting}
+                className="w-full py-3.5 px-4 rounded-xl bg-slate-100 hover:bg-white text-slate-900 font-semibold text-sm transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_25px_rgba(34,211,238,0.3)] flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed group"
+              >
+                {submitting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
+                    <span>Verifying Optiv Account...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                      <path
+                        fill="#4285F4"
+                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                      />
+                      <path
+                        fill="#EA4335"
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                      />
+                    </svg>
+                    <span>Sign in with Google Workspace</span>
+                    <ArrowRight className="w-4 h-4 text-slate-700 group-hover:translate-x-0.5 transition-transform" />
+                  </>
+                )}
+              </button>
 
-            {/* Emergency / Direct Access Option */}
-            <div className="relative flex py-1 items-center">
-              <div className="flex-grow border-t border-slate-800" />
-              <span className="flex-shrink mx-3 text-[10px] uppercase font-mono text-slate-500">
-                Or Instant Triage Access
-              </span>
-              <div className="flex-grow border-t border-slate-800" />
+              <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 text-[11px] text-slate-400 font-mono text-center">
+                <span>Account email will be validated: must be an official </span>
+                <strong className="text-cyan-300">@optiv.com</strong>
+                <span> account.</span>
+              </div>
             </div>
+          )}
 
-            <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2">
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={analystCallsign}
-                  onChange={(e) => setAnalystCallsign(e.target.value)}
-                  placeholder="Analyst Callsign (e.g. Lead Analyst)..."
-                  className="flex-1 bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-cyan-300 placeholder-slate-500 focus:outline-none focus:border-cyan-500/80 font-mono"
-                />
+          {/* METHOD 2: Optiv Corporate Email Login */}
+          {authMethod === 'email' && (
+            <form onSubmit={handleEmailSubmit} className="space-y-4">
+              {isRegistering && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5 font-mono">
+                    SOC Analyst Callsign / Full Name
+                  </label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-3 w-4 h-4 text-slate-500" />
+                    <input
+                      type="text"
+                      value={analystName}
+                      onChange={(e) => setAnalystName(e.target.value)}
+                      placeholder="e.g. Alex Vance"
+                      required
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-mono"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5 font-mono">
+                  Optiv Corporate Email Address
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-3 w-4 h-4 text-slate-500" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (localEmailError) setLocalEmailError('');
+                    }}
+                    placeholder="analyst.name@optiv.com"
+                    required
+                    className={`w-full bg-slate-950 border rounded-xl pl-9 pr-24 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none font-mono ${
+                      !isEmailDomainValid
+                        ? 'border-rose-500 focus:border-rose-400'
+                        : 'border-slate-700 focus:border-cyan-500'
+                    }`}
+                  />
+                  <span className="absolute right-3 top-2.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-cyan-400">
+                    @optiv.com
+                  </span>
+                </div>
+                {!isEmailDomainValid && (
+                  <p className="text-[10px] text-rose-400 mt-1 font-mono">
+                    * Domain must end with @optiv.com
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5 font-mono">
+                  Security Password
+                </label>
+                <div className="relative">
+                  <KeyRound className="absolute left-3 top-3 w-4 h-4 text-slate-500" />
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter security password..."
+                    required
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-600 hover:from-cyan-400 hover:to-violet-500 text-slate-950 font-bold text-xs uppercase tracking-wider transition-all shadow-[0_0_20px_rgba(34,211,238,0.25)] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {submitting ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                    <span>Processing Authorization...</span>
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>{isRegistering ? 'Register Optiv Account' : 'Authenticate with Optiv Email'}</span>
+                  </>
+                )}
+              </button>
+
+              {/* Toggle Register / Sign In */}
+              <div className="text-center pt-2">
                 <button
                   type="button"
-                  onClick={handleEmergencyLogin}
-                  className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white font-semibold text-xs transition-all flex items-center gap-1.5 shadow-sm cursor-pointer shrink-0"
+                  onClick={() => {
+                    setIsRegistering(!isRegistering);
+                    clearAuthError();
+                    setLocalEmailError('');
+                  }}
+                  className="text-xs font-mono text-cyan-400 hover:text-cyan-300 underline cursor-pointer"
                 >
-                  <Zap className="w-3.5 h-3.5" />
-                  <span>Enter Console</span>
+                  {isRegistering
+                    ? 'Already have an Optiv account? Sign In'
+                    : 'First time analyst? Register with your @optiv.com email'}
                 </button>
               </div>
-              <p className="text-[10px] text-slate-400 font-mono">
-                Allows testing and triage investigations without waiting for domain whitelist propagation.
-              </p>
-            </div>
+            </form>
+          )}
 
-            {/* Feature Highlights */}
-            <div className="pt-4 border-t border-slate-800 space-y-2.5">
-              <div className="flex items-center gap-2.5 text-xs text-slate-400">
-                <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0" />
-                <span>Zero-Trust RBAC & Session Attribution</span>
-              </div>
-              <div className="flex items-center gap-2.5 text-xs text-slate-400">
-                <Radio className="w-4 h-4 text-violet-400 shrink-0" />
-                <span>7-Engine Parallel Threat Telemetry</span>
-              </div>
-              <div className="flex items-center gap-2.5 text-xs text-slate-400">
-                <Cpu className="w-4 h-4 text-cyan-400 shrink-0" />
-                <span>Gemini 2.5 Multi-Provider AI Synthesis</span>
-              </div>
+          {/* Security Features Checklist */}
+          <div className="pt-5 mt-5 border-t border-slate-800 space-y-2">
+            <div className="flex items-center gap-2.5 text-xs text-slate-400">
+              <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0" />
+              <span>Corporate Domain Isolation (optiv.com)</span>
+            </div>
+            <div className="flex items-center gap-2.5 text-xs text-slate-400">
+              <Radio className="w-4 h-4 text-violet-400 shrink-0" />
+              <span>7-Engine Live Threat Feeds with AI Synthesis</span>
+            </div>
+            <div className="flex items-center gap-2.5 text-xs text-slate-400">
+              <Cpu className="w-4 h-4 text-cyan-400 shrink-0" />
+              <span>Analyst Attribution & Automated 24-hr Purge</span>
             </div>
           </div>
 
           {/* Security & Audit Disclaimer */}
-          <div className="mt-6 pt-4 border-t border-slate-800/80 text-center">
+          <div className="mt-5 pt-4 border-t border-slate-800/80 text-center">
             <p className="text-[10px] font-mono text-slate-500 leading-relaxed">
-              CONFIDENTIAL & RESTRICTED ACCESS. All actions and IOC submissions are logged under the authenticated analyst profile with a strict 24-hour retention window.
+              RESTRICTED ENTERPRISE APPLICATION. Unauthorized access attempts are monitored and logged. All session telemetry is tied to your verified Optiv identity.
             </p>
           </div>
         </div>
@@ -295,4 +484,3 @@ export const LoginGate: React.FC = () => {
     </div>
   );
 };
-
