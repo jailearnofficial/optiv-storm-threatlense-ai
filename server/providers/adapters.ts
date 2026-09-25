@@ -1692,10 +1692,16 @@ export function generateOTXDetails(
       adversary: p.adversary || undefined,
       created: p.created,
       modified: p.modified,
-      tags: Array.isArray(p.tags) ? p.tags : [],
-      targeted_countries: Array.isArray(p.targeted_countries) ? p.targeted_countries : [],
-      attack_ids: Array.isArray(p.attack_ids) ? p.attack_ids : [],
-      references: Array.isArray(p.references) ? p.references : [],
+      tags: Array.isArray(p.tags) ? p.tags.map((t: any) => (typeof t === 'string' ? t : t?.name || t?.display_name || String(t))) : [],
+      targeted_countries: Array.isArray(p.targeted_countries) ? p.targeted_countries.map((c: any) => (typeof c === 'string' ? c : c?.name || c?.display_name || String(c))) : [],
+      attack_ids: Array.isArray(p.attack_ids)
+        ? p.attack_ids.map((att: any) => {
+            if (typeof att === 'string') return att;
+            if (att && typeof att === 'object') return att.id || att.display_name || att.name || '';
+            return String(att || '');
+          }).filter(Boolean)
+        : [],
+      references: Array.isArray(p.references) ? p.references.filter((r: any) => typeof r === 'string') : [],
       indicator_count: p.indicator_count || p.indicators_count || p.indicators?.length || 0,
       vote: p.vote
     }));

@@ -89,11 +89,22 @@ export const AlienVaultOTXDeepDive: React.FC<AlienVaultOTXDeepDiveProps> = ({
     });
   }, [pulses, pulseSearch, selectedTag]);
 
+  // Helper to stringify an attack ID whether it is a string or an object {id, display_name, name}
+  const formatAttackId = (att: any): string => {
+    if (!att) return '';
+    if (typeof att === 'string') return att;
+    if (typeof att === 'object') return att.id || att.display_name || att.name || '';
+    return String(att);
+  };
+
   // Collect unique ATT&CK IDs across pulses
   const attackIds = useMemo(() => {
     const set = new Set<string>();
     pulses.forEach((p) => {
-      p.attack_ids?.forEach((id) => set.add(id));
+      p.attack_ids?.forEach((id) => {
+        const strId = formatAttackId(id);
+        if (strId) set.add(strId);
+      });
     });
     return Array.from(set);
   }, [pulses]);
@@ -102,9 +113,13 @@ export const AlienVaultOTXDeepDive: React.FC<AlienVaultOTXDeepDiveProps> = ({
   const allReferences = useMemo(() => {
     const set = new Set<string>();
     pulses.forEach((p) => {
-      p.references?.forEach((r) => set.add(r));
+      p.references?.forEach((r) => {
+        if (typeof r === 'string' && r.trim()) set.add(r);
+      });
     });
-    otxDetails.references?.forEach((r) => set.add(r));
+    otxDetails.references?.forEach((r) => {
+      if (typeof r === 'string' && r.trim()) set.add(r);
+    });
     return Array.from(set);
   }, [pulses, otxDetails.references]);
 
@@ -205,14 +220,17 @@ export const AlienVaultOTXDeepDive: React.FC<AlienVaultOTXDeepDiveProps> = ({
             </span>
             <div className="mt-2 flex flex-wrap gap-1">
               {otxDetails.targeted_countries && otxDetails.targeted_countries.length > 0 ? (
-                otxDetails.targeted_countries.slice(0, 4).map((country, idx) => (
-                  <span
-                    key={idx}
-                    className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-700"
-                  >
-                    {country}
-                  </span>
-                ))
+                otxDetails.targeted_countries.slice(0, 4).map((country, idx) => {
+                  const cStr = typeof country === "string" ? country : ((country as any)?.name || (country as any)?.display_name || String(country));
+                  return (
+                    <span
+                      key={idx}
+                      className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-700"
+                    >
+                      {cStr}
+                    </span>
+                  );
+                })
               ) : (
                 <span className="text-xs text-slate-400">Global / Not Specified</span>
               )}
@@ -396,28 +414,35 @@ export const AlienVaultOTXDeepDive: React.FC<AlienVaultOTXDeepDiveProps> = ({
                         {pulse.attack_ids && pulse.attack_ids.length > 0 && (
                           <>
                             <span className="text-[10px] uppercase font-mono text-slate-500 font-semibold">ATT&CK:</span>
-                            {pulse.attack_ids.map((id) => (
-                              <span
-                                key={id}
-                                className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-950/70 text-blue-300 border border-blue-800/60"
-                              >
-                                {id}
-                              </span>
-                            ))}
+                            {pulse.attack_ids.map((attItem, idx) => {
+                              const strId = formatAttackId(attItem);
+                              if (!strId) return null;
+                              return (
+                                <span
+                                  key={`${strId}-${idx}`}
+                                  className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-950/70 text-blue-300 border border-blue-800/60"
+                                >
+                                  {strId}
+                                </span>
+                              );
+                            })}
                           </>
                         )}
                       </div>
 
                       {/* Tags */}
                       <div className="flex flex-wrap items-center gap-1">
-                        {pulse.tags?.slice(0, 5).map((tag) => (
-                          <span
-                            key={tag}
-                            className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800"
-                          >
-                            #{tag}
-                          </span>
-                        ))}
+                        {pulse.tags?.slice(0, 5).map((tag, tagIdx) => {
+                          const tagStr = typeof tag === 'string' ? tag : (tag as any)?.name || (tag as any)?.display_name || String(tag);
+                          return (
+                            <span
+                              key={`${tagStr}-${tagIdx}`}
+                              className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800"
+                            >
+                              #{tagStr}
+                            </span>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
@@ -460,7 +485,7 @@ export const AlienVaultOTXDeepDive: React.FC<AlienVaultOTXDeepDiveProps> = ({
                       </span>
                     </div>
                     <div className="mt-2 pt-2 border-t border-slate-900 text-[10px] text-slate-500 font-mono">
-                      Referenced by {pulses.filter((p) => p.attack_ids?.includes(id)).length} pulse(s)
+                      Referenced by {pulses.filter((p) => p.attack_ids?.some((att) => formatAttackId(att) === id)).length} pulse(s)
                     </div>
                   </div>
                 ))}
@@ -483,15 +508,18 @@ export const AlienVaultOTXDeepDive: React.FC<AlienVaultOTXDeepDiveProps> = ({
               </h4>
               <div className="flex flex-wrap gap-2">
                 {otxDetails.targeted_countries && otxDetails.targeted_countries.length > 0 ? (
-                  otxDetails.targeted_countries.map((c, i) => (
-                    <div
-                      key={i}
-                      className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700/80 text-xs font-mono text-slate-200 flex items-center gap-1.5"
-                    >
-                      <span className="w-2 h-2 rounded-full bg-cyan-400" />
-                      <span>{c}</span>
-                    </div>
-                  ))
+                  otxDetails.targeted_countries.map((c, i) => {
+                    const cStr = typeof c === "string" ? c : ((c as any)?.name || (c as any)?.display_name || String(c));
+                    return (
+                      <div
+                        key={i}
+                        className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700/80 text-xs font-mono text-slate-200 flex items-center gap-1.5"
+                      >
+                        <span className="w-2 h-2 rounded-full bg-cyan-400" />
+                        <span>{cStr}</span>
+                      </div>
+                    );
+                  })
                 ) : (
                   <span className="text-xs text-slate-400">Global targeting telemetry / no exclusive regions.</span>
                 )}
