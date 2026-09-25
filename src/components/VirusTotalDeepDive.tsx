@@ -164,10 +164,11 @@ export const VirusTotalDeepDive: React.FC<VirusTotalDeepDiveProps> = ({
     }
   };
 
-  const maliciousCount = vtDetails?.analysis_stats?.malicious || provider.score.malicious || 0;
-  const suspiciousCount = vtDetails?.analysis_stats?.suspicious || provider.score.suspicious || 0;
-  const harmlessCount = vtDetails?.analysis_stats?.harmless || provider.score.harmless || 0;
-  const undetectedCount = vtDetails?.analysis_stats?.undetected || provider.score.undetected || 0;
+  const scoreObj = provider.score || {};
+  const maliciousCount = vtDetails?.analysis_stats?.malicious ?? scoreObj.malicious ?? 0;
+  const suspiciousCount = vtDetails?.analysis_stats?.suspicious ?? scoreObj.suspicious ?? 0;
+  const harmlessCount = vtDetails?.analysis_stats?.harmless ?? scoreObj.harmless ?? 0;
+  const undetectedCount = vtDetails?.analysis_stats?.undetected ?? scoreObj.undetected ?? 0;
   const totalEngines = maliciousCount + suspiciousCount + harmlessCount + undetectedCount || 74;
 
   const vtGraphUrl =

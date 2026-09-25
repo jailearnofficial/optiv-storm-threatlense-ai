@@ -107,8 +107,15 @@ export default function App() {
         });
 
         if (!res.ok) {
-          const errData = await res.json();
-          throw new Error(errData.error?.message || 'Threat lookup failed');
+          let errMsg = `Threat lookup failed (HTTP ${res.status})`;
+          try {
+            const errData = await res.json();
+            errMsg = errData.error?.message || errData.message || errMsg;
+          } catch {
+            const rawText = await res.text();
+            if (rawText) errMsg = `Server returned ${res.status}: ${rawText.substring(0, 100)}`;
+          }
+          throw new Error(errMsg);
         }
 
         const data = await res.json();

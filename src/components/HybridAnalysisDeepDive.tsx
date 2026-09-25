@@ -50,7 +50,8 @@ export const HybridAnalysisDeepDive: React.FC<HybridAnalysisDeepDiveProps> = ({
     }
 
     // Fallback if ha_details was not populated directly
-    const scoreVal = provider.score.threat_score ?? (provider.score.malicious ? 100 : 0);
+    const scoreObj = provider.score || {};
+    const scoreVal = scoreObj.threat_score ?? (scoreObj.malicious ? 100 : 0);
     const threatLevel: 'malicious' | 'suspicious' | 'clean' =
       scoreVal >= 70 ? 'malicious' : scoreVal >= 35 ? 'suspicious' : 'clean';
     const percentVal = threatLevel === 'malicious' ? 92 : threatLevel === 'suspicious' ? 38 : 0;

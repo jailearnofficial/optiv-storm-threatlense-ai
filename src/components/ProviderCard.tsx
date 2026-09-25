@@ -13,14 +13,17 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
   onViewDetails,
   isLoading
 }) => {
-  const isMalicious = (provider.score.malicious && provider.score.malicious > 0) ||
-    (provider.score.abuse_confidence && provider.score.abuse_confidence >= 50) ||
-    (provider.score.threat_score && provider.score.threat_score >= 50);
+  const score = provider.score || {};
+  const isMalicious = Boolean(
+    (score.malicious && score.malicious > 0) ||
+    (score.abuse_confidence && score.abuse_confidence >= 50) ||
+    (score.threat_score && score.threat_score >= 50)
+  );
 
-  const isSuspicious = !isMalicious && (
-    (provider.score.suspicious && provider.score.suspicious > 0) ||
-    (provider.score.pulse_count && provider.score.pulse_count > 0) ||
-    (provider.score.threat_score && provider.score.threat_score > 0)
+  const isSuspicious = !isMalicious && Boolean(
+    (score.suspicious && score.suspicious > 0) ||
+    (score.pulse_count && score.pulse_count > 0) ||
+    (score.threat_score && score.threat_score > 0)
   );
 
   const getStatusBadge = () => {
