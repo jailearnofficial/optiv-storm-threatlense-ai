@@ -248,6 +248,10 @@ export interface EvidenceObject {
   };
   mitre_hints: MitreHint[];
   rule_score: RuleScoreResult;
+  cached?: boolean;
+  cached_at?: string;
+  cache_age_ms?: number;
+  retention_window_hours?: number;
 }
 
 export interface FilePayload {

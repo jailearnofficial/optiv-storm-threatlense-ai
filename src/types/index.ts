@@ -233,6 +233,10 @@ export interface EvidenceObject {
     evidence: string;
   }>;
   rule_score: RuleScoreResult;
+  cached?: boolean;
+  cached_at?: string;
+  cache_age_ms?: number;
+  retention_window_hours?: number;
 }
 
 export interface MitreAttackRecord {

@@ -28,7 +28,7 @@ import {
   AIAnalysisVerdict,
   IndicatorType
 } from './types/index.js';
-import { FileText, ShieldAlert, CheckCircle2, Download, AlertCircle, Network, Cpu, Radio, ChevronDown, ChevronUp, Lock } from 'lucide-react';
+import { FileText, ShieldAlert, CheckCircle2, Download, AlertCircle, Network, Cpu, Radio, ChevronDown, ChevronUp, Lock, Database, RefreshCw } from 'lucide-react';
 
 function Dashboard() {
   const { user, loading: authLoading } = useAuth();
@@ -69,7 +69,12 @@ function Dashboard() {
   }, []);
 
   // Handler for lookup execution
-  const handleLookup = async (submitMode = false, file?: File, customAnalystName?: string) => {
+  const handleLookup = async (
+    submitMode = false,
+    file?: File,
+    customAnalystName?: string,
+    forceRefresh = false
+  ) => {
     const activeAnalyst = (customAnalystName !== undefined ? customAnalystName : analystName).trim();
     setLookupLoading(true);
     setErrorMessage(null);
@@ -83,6 +88,9 @@ function Dashboard() {
         if (activeAnalyst) {
           formData.append('analyst_name', activeAnalyst);
         }
+        if (forceRefresh) {
+          formData.append('force_refresh', 'true');
+        }
         const res = await fetch('/api/submit', {
           method: 'POST',
           body: formData
@@ -94,7 +102,13 @@ function Dashboard() {
         }
 
         const data = await res.json();
-        setEvidence(data.evidence);
+        const fullEvidence: EvidenceObject = {
+          ...data.evidence,
+          cached: Boolean(data.cached),
+          cache_age_ms: data.cache_age_ms,
+          retention_window_hours: data.evidence?.retention_window_hours || 24
+        };
+        setEvidence(fullEvidence);
         setIndicator(data.file_info.sha256);
         setSelectedType('hash');
 
@@ -111,7 +125,9 @@ function Dashboard() {
             indicator: indicator.trim(),
             type: selectedType === 'auto' ? undefined : selectedType,
             submit: submitMode,
-            analyst_name: activeAnalyst || undefined
+            analyst_name: activeAnalyst || undefined,
+            force_refresh: forceRefresh,
+            bypass_cache: forceRefresh
           })
         });
 
@@ -136,7 +152,11 @@ function Dashboard() {
           providers: data.providers,
           related: data.related || { domains: [], ips: [], urls: [], hashes: [] },
           mitre_hints: data.mitre_hints || [],
-          rule_score: data.rule_score
+          rule_score: data.rule_score,
+          cached: Boolean(data.cached),
+          cached_at: data.cached_at,
+          cache_age_ms: data.cache_age_ms,
+          retention_window_hours: data.retention_window_hours || 24
         };
         setEvidence(fullEvidence);
       }
@@ -329,6 +349,47 @@ function Dashboard() {
                   <p className="text-[11px] text-slate-500 mt-1">URLhaus, urlscan.io, VT, OTX</p>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* 24-Hour Retention Cache Notice */}
+        {evidence && evidence.cached && (
+          <div className="relative z-10 max-w-5xl mx-auto px-4 mb-5">
+            <div className="rounded-xl bg-gradient-to-r from-cyan-950/80 via-slate-900/90 to-cyan-950/80 border border-cyan-500/50 p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-[0_0_20px_rgba(34,211,238,0.15)]">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-cyan-500/20 text-cyan-400 shrink-0">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-cyan-300">
+                      24-Hour Retention Cache Hit
+                    </span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-950 border border-cyan-700/60 text-cyan-300">
+                      Local Cache · Zero Threat Feed Quota Used
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-0.5">
+                    Identical indicator previously investigated within the 24-hour retention window. Retrieved instantly from local cache.
+                    {evidence.cache_age_ms !== undefined && (
+                      <span className="font-mono text-cyan-400 ml-1.5 font-medium">
+                        · Analyzed {Math.max(1, Math.round(evidence.cache_age_ms / 60000))}m ago
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleLookup(false, undefined, analystName, true)}
+                disabled={lookupLoading}
+                className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-750 border border-cyan-500/40 text-cyan-300 hover:text-cyan-200 text-xs font-mono font-semibold flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer shadow-sm disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${lookupLoading ? 'animate-spin' : ''}`} />
+                <span>Force Live Re-Scan</span>
+              </button>
             </div>
           </div>
         )}

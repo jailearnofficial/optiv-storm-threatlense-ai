@@ -83,7 +83,7 @@ export function createApp() {
   // 3. Lookup Endpoint
   app.post('/api/lookup', async (req: Request, res: Response) => {
     try {
-      const { indicator, type, submit, analyst_name } = req.body;
+      const { indicator, type, submit, analyst_name, bypass_cache, force_refresh } = req.body;
 
       if (!indicator || typeof indicator !== 'string') {
         return res.status(422).json({
@@ -99,10 +99,13 @@ export function createApp() {
       }
 
       const cleanAnalyst = sanitizeAnalystName(analyst_name);
+      // Strictly respect 24-hour cache: only bypass if explicitly requested via bypass_cache/force_refresh
+      const bypass = Boolean(bypass_cache || force_refresh);
+
       const evidence = await orchestrator.runLookup(
         detection.normalized,
         detection.type,
-        Boolean(submit),
+        bypass,
         undefined,
         cleanAnalyst
       );
@@ -115,7 +118,11 @@ export function createApp() {
         rule_score: evidence.rule_score,
         related: evidence.related,
         mitre_hints: evidence.mitre_hints,
-        collected_at: evidence.collected_at
+        collected_at: evidence.collected_at,
+        cached: Boolean(evidence.cached),
+        cached_at: evidence.cached_at,
+        cache_age_ms: evidence.cache_age_ms,
+        retention_window_hours: evidence.retention_window_hours || 24
       });
     } catch (err: any) {
       console.error('Lookup failed:', err);
@@ -130,6 +137,7 @@ export function createApp() {
     const indicator = req.query.indicator as string;
     const type = req.query.type as string;
     const analystName = sanitizeAnalystName(req.query.analyst_name);
+    const bypassCache = req.query.bypass_cache === 'true' || req.query.force_refresh === 'true';
 
     if (!indicator) {
       return res.status(422).json({ error: { code: 'MISSING_INDICATOR', message: 'Indicator required.' } });
@@ -154,7 +162,7 @@ export function createApp() {
       const evidence = await orchestrator.runLookup(
         detection.normalized,
         detection.type,
-        false,
+        bypassCache,
         (providerResult) => {
           sendEvent('provider_update', providerResult);
         },
@@ -169,10 +177,11 @@ export function createApp() {
     }
   });
 
-  // 5. Submit Endpoint (File / URL submission flow)
+  // 5. Submit Endpoint (File / URL submission flow with 24-hour cache verification)
   app.post('/api/submit', upload.single('file'), async (req: Request, res: Response) => {
     try {
       const analystName = sanitizeAnalystName(req.body.analyst_name);
+      const bypassCache = req.body.bypass_cache === 'true' || req.body.force_refresh === 'true';
 
       if (req.file) {
         const buffer = req.file.buffer;
@@ -180,10 +189,39 @@ export function createApp() {
         const sha1 = crypto.createHash('sha1').update(buffer).digest('hex');
         const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
 
+        // Check if this hash was already analyzed within the 24-hour retention window
+        if (!bypassCache) {
+          const cachedMatch = db.findCachedLookup(sha256, 'hash');
+          if (cachedMatch) {
+            console.log(`[OPTIV 24h File Cache HIT] File SHA256 "${sha256}" retrieved from 24h cache.`);
+            const cachedEvidence = JSON.parse(JSON.stringify(cachedMatch.lookup.evidence));
+            cachedEvidence.cached = true;
+            cachedEvidence.cached_at = cachedMatch.lookup.createdAt;
+            cachedEvidence.cache_age_ms = cachedMatch.ageMs;
+            cachedEvidence.retention_window_hours = 24;
+            if (analystName) cachedEvidence.analyst_name = analystName;
+
+            return res.json({
+              lookup_id: cachedMatch.lookup.id,
+              analyst_name: cachedEvidence.analyst_name,
+              cached: true,
+              cache_age_ms: cachedMatch.ageMs,
+              file_info: {
+                original_name: req.file.originalname,
+                size_bytes: req.file.size,
+                md5,
+                sha1,
+                sha256
+              },
+              evidence: cachedEvidence
+            });
+          }
+        }
+
         const evidence = await orchestrator.runLookup(
           sha256,
           'hash',
-          true,
+          true, // Live parsing to providers for new file
           undefined,
           analystName,
           {
@@ -209,6 +247,7 @@ export function createApp() {
         return res.json({
           lookup_id: evidence.id,
           analyst_name: evidence.analyst_name,
+          cached: false,
           file_info: {
             original_name: req.file.originalname,
             size_bytes: req.file.size,
@@ -227,17 +266,43 @@ export function createApp() {
           return res.status(422).json({ error: { code: 'INVALID_URL', message: detection.error } });
         }
 
+        // Check if URL was already analyzed within 24 hours
+        if (!bypassCache) {
+          const cachedMatch = db.findCachedLookup(detection.normalized, 'url');
+          if (cachedMatch) {
+            console.log(`[OPTIV 24h URL Cache HIT] URL "${detection.normalized}" retrieved from 24h cache.`);
+            const cachedEvidence = JSON.parse(JSON.stringify(cachedMatch.lookup.evidence));
+            cachedEvidence.cached = true;
+            cachedEvidence.cached_at = cachedMatch.lookup.createdAt;
+            cachedEvidence.cache_age_ms = cachedMatch.ageMs;
+            cachedEvidence.retention_window_hours = 24;
+            if (analystName) cachedEvidence.analyst_name = analystName;
+
+            return res.json({
+              lookup_id: cachedMatch.lookup.id,
+              analyst_name: cachedEvidence.analyst_name,
+              visibility: visibility || 'unlisted',
+              cached: true,
+              cache_age_ms: cachedMatch.ageMs,
+              evidence: cachedEvidence
+            });
+          }
+        }
+
         const evidence = await orchestrator.runLookup(
           detection.normalized,
           'url',
-          true,
+          false,
           undefined,
           analystName
         );
+
         return res.json({
           lookup_id: evidence.id,
           analyst_name: evidence.analyst_name,
           visibility: visibility || 'unlisted',
+          cached: Boolean(evidence.cached),
+          cache_age_ms: evidence.cache_age_ms,
           evidence
         });
       }

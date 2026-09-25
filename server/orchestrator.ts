@@ -48,31 +48,45 @@ export class Orchestrator {
     analystName?: string,
     filePayload?: FilePayload
   ): Promise<EvidenceObject> {
-    // Check 15-minute TTL cache per indicator unless bypassCache is requested
+    // Check 24-hour strict retention cache per indicator unless bypassCache is requested
+    // If an analyst searches for the same hash, domain, or URL within the 24-hour retention window,
+    // fetch directly from cached data without parsing to threat feeds.
+    // If it has expired (> 24 hours) or is not cached, parse to threat feeds.
     if (!bypassCache) {
-      const existing = db.getLookupByIndicator(indicator);
-      if (existing) {
-        const ageMs = Date.now() - new Date(existing.createdAt).getTime();
-        if (ageMs < 15 * 60 * 1000) {
-          if (analystName) {
-            existing.evidence.analyst_name = analystName;
-            existing.analystName = analystName;
-          }
-          if (existing.evidence.mitre_hints) {
-            const seen = new Set<string>();
-            existing.evidence.mitre_hints = existing.evidence.mitre_hints.filter((h) => {
-              if (seen.has(h.technique_id)) return false;
-              seen.add(h.technique_id);
-              return true;
-            });
-          }
-          if (onProgress) {
-            for (const p of existing.evidence.providers) {
-              onProgress(p);
-            }
-          }
-          return existing.evidence;
+      const match = db.findCachedLookup(indicator, type);
+      if (match) {
+        console.log(
+          `[OPTIV 24h Cache HIT] Indicator "${indicator}" matched cached record (${match.matchType}, age: ${Math.round(match.ageMs / 1000)}s, remaining: ${Math.round(match.expiresInMs / 1000 / 60)}m). Returning cached data without querying threat feeds.`
+        );
+
+        // Deep copy evidence so we don't mutate stored database records
+        const cachedEvidence: EvidenceObject = JSON.parse(JSON.stringify(match.lookup.evidence));
+        cachedEvidence.id = match.lookup.id;
+        cachedEvidence.cached = true;
+        cachedEvidence.cached_at = match.lookup.createdAt;
+        cachedEvidence.cache_age_ms = match.ageMs;
+        cachedEvidence.retention_window_hours = 24;
+
+        if (analystName) {
+          cachedEvidence.analyst_name = analystName;
         }
+
+        if (cachedEvidence.mitre_hints) {
+          const seen = new Set<string>();
+          cachedEvidence.mitre_hints = cachedEvidence.mitre_hints.filter((h) => {
+            if (seen.has(h.technique_id)) return false;
+            seen.add(h.technique_id);
+            return true;
+          });
+        }
+
+        if (onProgress) {
+          for (const p of cachedEvidence.providers) {
+            onProgress(p);
+          }
+        }
+
+        return cachedEvidence;
       }
     }
 
