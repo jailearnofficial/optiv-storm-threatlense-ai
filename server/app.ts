@@ -12,6 +12,7 @@ import { orchestrator } from './orchestrator.js';
 import { runGeminiTriage } from './ai/gemini.js';
 import { db } from './db.js';
 import { generateHtmlReport, generateIOCsCsv, generateSTIXBundle } from './report/generator.js';
+import { userAuth } from './auth.js';
 
 export function createApp() {
   const app = express();
@@ -51,6 +52,43 @@ export function createApp() {
       "frame-ancestors 'self' https://*.google.com https://*.run.app https://*.googleusercontent.com https://*.vercel.app;"
     );
     next();
+  });
+
+  // Authentication Endpoints for @optiv.com and @gmail.com
+  app.post('/api/auth/register', (req: Request, res: Response) => {
+    const { email, password, displayName } = req.body || {};
+    try {
+      if (!email || typeof email !== 'string') {
+        res.status(400).json({ error: 'Email address is required.' });
+        return;
+      }
+      if (!password || typeof password !== 'string') {
+        res.status(400).json({ error: 'Password is required.' });
+        return;
+      }
+      const user = userAuth.register(email, password, displayName);
+      res.status(201).json({ success: true, user });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message || 'Registration failed.' });
+    }
+  });
+
+  app.post('/api/auth/login', (req: Request, res: Response) => {
+    const { email, password } = req.body || {};
+    try {
+      if (!email || typeof email !== 'string') {
+        res.status(400).json({ error: 'Email address is required.' });
+        return;
+      }
+      if (!password || typeof password !== 'string') {
+        res.status(400).json({ error: 'Password is required.' });
+        return;
+      }
+      const user = userAuth.login(email, password);
+      res.json({ success: true, user });
+    } catch (err: any) {
+      res.status(401).json({ error: err.message || 'Authentication failed.' });
+    }
   });
 
   // 1. Health Endpoint

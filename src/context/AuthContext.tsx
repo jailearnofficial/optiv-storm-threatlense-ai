@@ -13,7 +13,14 @@ import {
   syncUserProfile
 } from '../lib/firebase.js';
 
-// Validation helper: accept @optiv.com and @gmail.com
+export interface AuthUser {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL?: string | null;
+}
+
+// Validation helper: strictly accept @optiv.com and @gmail.com
 export function isAllowedEmail(email?: string | null): boolean {
   if (!email) return false;
   const clean = email.trim().toLowerCase();
@@ -23,7 +30,7 @@ export function isAllowedEmail(email?: string | null): boolean {
 export const isOptivEmail = isAllowedEmail;
 
 interface AuthContextType {
-  user: User | null;
+  user: User | AuthUser | null;
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
@@ -48,8 +55,10 @@ const AuthContext = createContext<AuthContextType>({
   clearAuthError: () => {}
 });
 
+const STORAGE_KEY = 'threatlense_auth_analyst';
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | AuthUser | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isUnauthorizedDomain, setIsUnauthorizedDomain] = useState<boolean>(false);
@@ -60,9 +69,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCurrentHost(window.location.hostname);
     }
 
-    // Clear any previous legacy session storage
+    // 1. Check for stored analyst session
+    let restoredLocalUser: AuthUser | null = null;
     try {
-      sessionStorage.removeItem('soc_analyst_session');
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored) as AuthUser;
+        if (parsed?.email && isAllowedEmail(parsed.email)) {
+          restoredLocalUser = parsed;
+          setUser(parsed);
+        }
+      }
     } catch {}
 
     // Test Firestore connection on boot
@@ -70,14 +87,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn('Initial Firestore connection probe:', err);
     });
 
+    // 2. Listen to Firebase Google Auth state
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        // Enforce @optiv.com or @gmail.com restriction
-        if (!isOptivEmail(currentUser.email)) {
+        if (!isAllowedEmail(currentUser.email)) {
           await fbSignOut(auth);
           setUser(null);
           setAuthError(
-            `Access Denied: Only @optiv.com or @gmail.com email addresses are authorized. Attempted logon: ${currentUser.email || 'Unknown'}`
+            `Access Denied: Only @optiv.com or @gmail.com accounts are authorized. Attempted logon: ${currentUser.email || 'Unknown'}`
           );
           setLoading(false);
           return;
@@ -90,7 +107,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.error('Failed to sync user profile:', e);
         }
       } else {
-        setUser(null);
+        // If no Firebase user, retain the stored local user session if present
+        if (!restoredLocalUser) {
+          setUser(null);
+        }
       }
       setLoading(false);
     });
@@ -104,7 +124,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const result = await signInWithPopup(auth, googleProvider);
       if (result.user) {
-        if (!isOptivEmail(result.user.email)) {
+        if (!isAllowedEmail(result.user.email)) {
           await fbSignOut(auth);
           setUser(null);
           const rejectedMsg = `Access Denied: Only @optiv.com or @gmail.com accounts are authorized. Logged-in Google account: ${result.user.email}`;
@@ -116,11 +136,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err: unknown) {
       console.error('Google Authentication error:', err);
       const errMsg = err instanceof Error ? err.message : 'Google sign-in failed.';
-      
+
       if (errMsg.includes('auth/unauthorized-domain')) {
         setIsUnauthorizedDomain(true);
         setAuthError(
-          `Domain Unauthorized: "${window.location.hostname}" is not yet in the Firebase Authorized Domains list. Add it to Firebase Console settings.`
+          `Domain Unauthorized: "${window.location.hostname}" is not yet in the Firebase Authorized Domains list. Add it to Firebase Console or use Email Sign-In.`
         );
       } else if (errMsg.includes('popup-closed-by-user')) {
         setAuthError('Authentication window closed before completion.');
@@ -135,38 +155,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAuthError(null);
     setIsUnauthorizedDomain(false);
 
-    const cleanEmail = email.trim();
-    if (!isOptivEmail(cleanEmail)) {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!isAllowedEmail(cleanEmail)) {
       const err = 'Access Denied: Only @optiv.com or @gmail.com email addresses are permitted.';
       setAuthError(err);
       throw new Error(err);
     }
 
     try {
-      const result = await signInWithEmailAndPassword(auth, cleanEmail, pass);
-      if (result.user) {
-        if (!isOptivEmail(result.user.email)) {
-          await fbSignOut(auth);
-          setUser(null);
-          const err = `Access Denied: Only @optiv.com or @gmail.com accounts are authorized.`;
-          setAuthError(err);
-          throw new Error(err);
-        }
-        await syncUserProfile(result.user);
+      // Authenticate against our backend auth provider
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail, password: pass })
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Authentication failed. Please check your credentials.');
       }
+
+      const authenticatedAnalyst: AuthUser = {
+        uid: data.user.id,
+        email: data.user.email,
+        displayName: data.user.displayName,
+        photoURL: null
+      };
+
+      setUser(authenticatedAnalyst);
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(authenticatedAnalyst));
+      } catch {}
+
+      // Background optional Firebase Auth attempt (if enabled)
+      signInWithEmailAndPassword(auth, cleanEmail, pass).catch(() => {});
     } catch (err: unknown) {
       console.error('Email sign-in error:', err);
       const errMsg = err instanceof Error ? err.message : 'Authentication failed.';
-
-      if (errMsg.includes('auth/operation-not-allowed')) {
-        setAuthError(
-          'Email/Password sign-in is not yet toggled ON in your Firebase project. Please enable Email/Password provider in the Firebase Console (Authentication > Sign-in method).'
-        );
-      } else if (errMsg.includes('auth/invalid-credential') || errMsg.includes('auth/user-not-found') || errMsg.includes('auth/wrong-password')) {
-        setAuthError('Invalid credentials. If this is your first time logging in with this email, please click "Register New SOC Analyst".');
-      } else {
-        setAuthError(errMsg);
-      }
+      setAuthError(errMsg);
       throw err;
     }
   };
@@ -175,8 +201,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAuthError(null);
     setIsUnauthorizedDomain(false);
 
-    const cleanEmail = email.trim();
-    if (!isOptivEmail(cleanEmail)) {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!isAllowedEmail(cleanEmail)) {
       const err = 'Access Denied: Only @optiv.com or @gmail.com email addresses can be registered.';
       setAuthError(err);
       throw new Error(err);
@@ -189,26 +215,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      const result = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
-      if (result.user) {
-        if (name.trim()) {
-          await updateProfile(result.user, { displayName: name.trim() });
-        }
-        await syncUserProfile(result.user);
+      // Register with backend auth provider
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: cleanEmail,
+          password: pass,
+          displayName: name.trim() || cleanEmail.split('@')[0]
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Registration failed.');
       }
+
+      const authenticatedAnalyst: AuthUser = {
+        uid: data.user.id,
+        email: data.user.email,
+        displayName: data.user.displayName,
+        photoURL: null
+      };
+
+      setUser(authenticatedAnalyst);
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(authenticatedAnalyst));
+      } catch {}
+
+      // Background optional Firebase Auth registration (if enabled)
+      createUserWithEmailAndPassword(auth, cleanEmail, pass)
+        .then(async (cred) => {
+          if (name.trim()) {
+            await updateProfile(cred.user, { displayName: name.trim() });
+          }
+        })
+        .catch(() => {});
     } catch (err: unknown) {
       console.error('Email registration error:', err);
       const errMsg = err instanceof Error ? err.message : 'Registration failed.';
-
-      if (errMsg.includes('auth/operation-not-allowed')) {
-        setAuthError(
-          'Email/Password provider is not yet enabled in Firebase Console. Go to Firebase Console > Authentication > Sign-in method and enable Email/Password.'
-        );
-      } else if (errMsg.includes('auth/email-already-in-use')) {
-        setAuthError('An account with this email already exists. Please switch to "Sign In".');
-      } else {
-        setAuthError(errMsg);
-      }
+      setAuthError(errMsg);
       throw err;
     }
   };
@@ -216,6 +262,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut = async () => {
     setAuthError(null);
     setIsUnauthorizedDomain(false);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {}
     try {
       await fbSignOut(auth);
     } catch (err: unknown) {

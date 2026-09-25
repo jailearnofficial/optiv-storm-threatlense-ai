@@ -277,21 +277,10 @@ export const LoginGate: React.FC = () => {
             <div className="mb-5 p-3.5 rounded-xl bg-rose-950/60 border border-rose-800/80 text-rose-300 text-xs flex items-start gap-2.5">
               <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
               <div className="flex-1">
-                <span className="font-semibold block mb-0.5">Authorization Error</span>
+                <span className="font-semibold block mb-0.5">Authorization Notice</span>
                 <p className="text-[11px] text-rose-200 leading-relaxed">
                   {localEmailError || authError}
                 </p>
-                {authError?.includes('Firebase Console') && (
-                  <a
-                    href={firebaseProvidersUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-cyan-300 underline mt-1.5 text-[10px] font-mono"
-                  >
-                    <span>Enable Email/Password in Firebase Console</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                )}
               </div>
             </div>
           )}
