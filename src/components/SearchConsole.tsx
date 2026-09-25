@@ -135,11 +135,6 @@ export const SearchConsole: React.FC<SearchConsoleProps> = ({
     }
 
     setAnalystName(clean);
-    try {
-      localStorage.setItem('soc_analyst_name', clean);
-    } catch {
-      // ignore quota / private mode storage error
-    }
     setShowAnalystModal(false);
 
     // Continue what was set so far
@@ -186,15 +181,20 @@ export const SearchConsole: React.FC<SearchConsoleProps> = ({
           <input
             type="text"
             value={analystName}
-            onChange={(e) => {
-              setAnalystName(e.target.value);
-              try {
-                localStorage.setItem('soc_analyst_name', e.target.value);
-              } catch {}
-            }}
+            onChange={(e) => setAnalystName(e.target.value)}
             placeholder="Enter SOC analyst name (e.g., Jane Doe)..."
             className="bg-transparent text-cyan-300 font-mono text-xs placeholder-slate-500 focus:outline-none w-52 sm:w-64"
           />
+          {analystName && (
+            <button
+              type="button"
+              onClick={() => setAnalystName('')}
+              title="Clear analyst name"
+              className="text-slate-500 hover:text-slate-300 p-0.5 rounded transition-colors"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
           {analystName.trim() ? (
             <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-1.5 py-0.5 rounded">
               <UserCheck className="w-3 h-3" />

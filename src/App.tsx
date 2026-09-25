@@ -31,13 +31,7 @@ import { FileText, ShieldAlert, CheckCircle2, Download, AlertCircle, Network, Cp
 export default function App() {
   const [indicator, setIndicator] = useState<string>('');
   const [selectedType, setSelectedType] = useState<string>('auto');
-  const [analystName, setAnalystName] = useState<string>(() => {
-    try {
-      return localStorage.getItem('soc_analyst_name') || '';
-    } catch {
-      return '';
-    }
-  });
+  const [analystName, setAnalystName] = useState<string>('');
   const [lookupLoading, setLookupLoading] = useState<boolean>(false);
   const [analyzing, setAnalyzing] = useState<boolean>(false);
   const [evidence, setEvidence] = useState<EvidenceObject | null>(null);
@@ -56,6 +50,9 @@ export default function App() {
   const [providerHealth, setProviderHealth] = useState<Record<string, { configured: boolean; status: string }>>({});
 
   useEffect(() => {
+    try {
+      localStorage.removeItem('soc_analyst_name');
+    } catch {}
     fetch('/api/health')
       .then((res) => res.json())
       .then((data) => {
@@ -191,9 +188,6 @@ export default function App() {
         setEvidence(ev);
         setIndicator(ev.indicator.normalized);
         setSelectedType(ev.indicator.type);
-        if (ev.analyst_name && !analystName) {
-          setAnalystName(ev.analyst_name);
-        }
 
         // Check if there is an existing analysis for this lookup
         const anlRes = await fetch('/api/analyze', {
