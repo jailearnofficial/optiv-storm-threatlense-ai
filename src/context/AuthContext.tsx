@@ -13,12 +13,14 @@ import {
   syncUserProfile
 } from '../lib/firebase.js';
 
-// Validation helper: strictly accept optiv.com (and developer admin account)
-export function isOptivEmail(email?: string | null): boolean {
+// Validation helper: accept @optiv.com and @gmail.com
+export function isAllowedEmail(email?: string | null): boolean {
   if (!email) return false;
   const clean = email.trim().toLowerCase();
-  return clean.endsWith('@optiv.com') || clean === 'jai.learn.official@gmail.com';
+  return clean.endsWith('@optiv.com') || clean.endsWith('@gmail.com');
 }
+
+export const isOptivEmail = isAllowedEmail;
 
 interface AuthContextType {
   user: User | null;
@@ -70,12 +72,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        // Enforce strict @optiv.com restriction
+        // Enforce @optiv.com or @gmail.com restriction
         if (!isOptivEmail(currentUser.email)) {
           await fbSignOut(auth);
           setUser(null);
           setAuthError(
-            `Access Denied: Only @optiv.com corporate email addresses are authorized. Attempted logon: ${currentUser.email || 'Unknown'}`
+            `Access Denied: Only @optiv.com or @gmail.com email addresses are authorized. Attempted logon: ${currentUser.email || 'Unknown'}`
           );
           setLoading(false);
           return;
@@ -105,7 +107,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!isOptivEmail(result.user.email)) {
           await fbSignOut(auth);
           setUser(null);
-          const rejectedMsg = `Access Denied: Only @optiv.com accounts are authorized. Logged-in Google account: ${result.user.email}`;
+          const rejectedMsg = `Access Denied: Only @optiv.com or @gmail.com accounts are authorized. Logged-in Google account: ${result.user.email}`;
           setAuthError(rejectedMsg);
           throw new Error(rejectedMsg);
         }
@@ -122,7 +124,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         );
       } else if (errMsg.includes('popup-closed-by-user')) {
         setAuthError('Authentication window closed before completion.');
-      } else if (!errMsg.includes('Access Denied: Only @optiv.com')) {
+      } else if (!errMsg.includes('Access Denied: Only')) {
         setAuthError(errMsg);
       }
       throw err;
@@ -135,7 +137,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const cleanEmail = email.trim();
     if (!isOptivEmail(cleanEmail)) {
-      const err = 'Access Denied: Only @optiv.com corporate email addresses are permitted.';
+      const err = 'Access Denied: Only @optiv.com or @gmail.com email addresses are permitted.';
       setAuthError(err);
       throw new Error(err);
     }
@@ -146,7 +148,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!isOptivEmail(result.user.email)) {
           await fbSignOut(auth);
           setUser(null);
-          const err = `Access Denied: Only @optiv.com accounts are authorized.`;
+          const err = `Access Denied: Only @optiv.com or @gmail.com accounts are authorized.`;
           setAuthError(err);
           throw new Error(err);
         }
@@ -161,7 +163,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           'Email/Password sign-in is not yet toggled ON in your Firebase project. Please enable Email/Password provider in the Firebase Console (Authentication > Sign-in method).'
         );
       } else if (errMsg.includes('auth/invalid-credential') || errMsg.includes('auth/user-not-found') || errMsg.includes('auth/wrong-password')) {
-        setAuthError('Invalid credentials. If this is your first time logging in with this @optiv.com email, please click "Register New Optiv Analyst".');
+        setAuthError('Invalid credentials. If this is your first time logging in with this email, please click "Register New SOC Analyst".');
       } else {
         setAuthError(errMsg);
       }
@@ -175,7 +177,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const cleanEmail = email.trim();
     if (!isOptivEmail(cleanEmail)) {
-      const err = 'Access Denied: Only @optiv.com corporate email addresses can be registered.';
+      const err = 'Access Denied: Only @optiv.com or @gmail.com email addresses can be registered.';
       setAuthError(err);
       throw new Error(err);
     }
@@ -203,7 +205,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           'Email/Password provider is not yet enabled in Firebase Console. Go to Firebase Console > Authentication > Sign-in method and enable Email/Password.'
         );
       } else if (errMsg.includes('auth/email-already-in-use')) {
-        setAuthError('An account with this @optiv.com email already exists. Please switch to "Sign In".');
+        setAuthError('An account with this email already exists. Please switch to "Sign In".');
       } else {
         setAuthError(errMsg);
       }
