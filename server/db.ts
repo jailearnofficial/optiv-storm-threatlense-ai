@@ -8,6 +8,8 @@ import fs from 'fs';
 import path from 'path';
 import { EvidenceObject } from './providers/types.js';
 
+export const RETENTION_WINDOW_MS = 24 * 60 * 60 * 1000; // 24-hour strict retention window
+
 export interface StoredLookup {
   id: string;
   indicator: string;
@@ -16,6 +18,14 @@ export interface StoredLookup {
   createdAt: string;
   evidence: EvidenceObject;
   analystName?: string;
+  fileName?: string;
+  fileSize?: number;
+  actionType?: 'file_submission' | 'indicator_search';
+  hashes?: {
+    md5?: string;
+    sha1?: string;
+    sha256?: string;
+  };
 }
 
 export interface StoredAnalysis {
@@ -27,14 +37,42 @@ export interface StoredAnalysis {
   analystName?: string;
 }
 
+export interface HistoryItemDTO {
+  id: string;
+  indicator: string;
+  defanged: string;
+  type: string;
+  createdAt: string;
+  ruleScore: number;
+  verdict?: string;
+  analystName: string;
+  actionType: 'file_submission' | 'indicator_search';
+  fileName?: string;
+  fileSize?: number;
+  hashes: {
+    md5?: string;
+    sha1?: string;
+    sha256?: string;
+  };
+}
+
 class Database {
   private dbPath: string;
   private lookups: Map<string, StoredLookup> = new Map();
   private analyses: Map<string, StoredAnalysis> = new Map();
+  private purgeInterval?: NodeJS.Timeout;
 
   constructor() {
     this.dbPath = path.resolve(process.cwd(), 'data');
     this.init();
+
+    // Automatically purge records older than 24 hours every 5 minutes
+    this.purgeInterval = setInterval(() => {
+      this.purgeOldRecords();
+    }, 5 * 60 * 1000);
+    if (this.purgeInterval.unref) {
+      this.purgeInterval.unref();
+    }
   }
 
   private init() {
@@ -55,9 +93,43 @@ class Database {
         const list: StoredAnalysis[] = JSON.parse(raw);
         for (const item of list) this.analyses.set(item.id, item);
       }
+
+      // Purge any existing records loaded from disk that exceed 24 hours
+      this.purgeOldRecords();
     } catch (err) {
       console.error('Error initializing data store:', err);
     }
+  }
+
+  /**
+   * Purge lookups and analyses older than 24 hours from in-memory and disk store
+   */
+  purgeOldRecords(maxAgeMs = RETENTION_WINDOW_MS): number {
+    const cutoff = Date.now() - maxAgeMs;
+    let purgedLookups = 0;
+    let purgedAnalyses = 0;
+
+    for (const [id, lookup] of this.lookups.entries()) {
+      const createdTime = new Date(lookup.createdAt).getTime();
+      if (isNaN(createdTime) || createdTime < cutoff) {
+        this.lookups.delete(id);
+        purgedLookups++;
+      }
+    }
+
+    for (const [id, analysis] of this.analyses.entries()) {
+      const createdTime = new Date(analysis.createdAt).getTime();
+      if (isNaN(createdTime) || createdTime < cutoff || !this.lookups.has(analysis.lookupId)) {
+        this.analyses.delete(id);
+        purgedAnalyses++;
+      }
+    }
+
+    if (purgedLookups > 0 || purgedAnalyses > 0) {
+      this.persist();
+    }
+
+    return purgedLookups;
   }
 
   private persist() {
@@ -79,6 +151,7 @@ class Database {
   }
 
   saveLookup(lookup: StoredLookup): void {
+    this.purgeOldRecords();
     this.lookups.set(lookup.id, lookup);
     this.persist();
   }
@@ -96,15 +169,10 @@ class Database {
     return undefined;
   }
 
-  listRecentLookups(limit = 20): Array<{
-    id: string;
-    indicator: string;
-    defanged: string;
-    type: string;
-    createdAt: string;
-    ruleScore: number;
-    verdict?: string;
-  }> {
+  listRecentLookups(limit = 50): HistoryItemDTO[] {
+    // Purge records older than 24 hours first
+    this.purgeOldRecords();
+
     const sorted = Array.from(this.lookups.values()).sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
@@ -112,25 +180,40 @@ class Database {
     return sorted.slice(0, limit).map((l) => {
       // Find associated analysis if any
       let verdict: string | undefined;
+      let analysisAnalyst: string | undefined;
       for (const a of this.analyses.values()) {
         if (a.lookupId === l.id) {
           verdict = a.verdict?.verdict;
+          analysisAnalyst = a.analystName;
           break;
         }
       }
+
+      const hashes = l.hashes || {
+        sha256: l.type === 'hash' && l.indicator.length === 64 ? l.indicator : l.evidence?.related?.hashes?.find((h) => h.length === 64),
+        sha1: l.type === 'hash' && l.indicator.length === 40 ? l.indicator : l.evidence?.related?.hashes?.find((h) => h.length === 40),
+        md5: l.type === 'hash' && l.indicator.length === 32 ? l.indicator : l.evidence?.related?.hashes?.find((h) => h.length === 32)
+      };
+
       return {
         id: l.id,
         indicator: l.indicator,
         defanged: l.defanged,
         type: l.type,
         createdAt: l.createdAt,
-        ruleScore: l.evidence.rule_score.value,
-        verdict
+        ruleScore: l.evidence?.rule_score?.value ?? 0,
+        verdict,
+        analystName: l.analystName || analysisAnalyst || l.evidence?.analyst_name || 'SOC Analyst',
+        fileName: l.fileName,
+        fileSize: l.fileSize,
+        actionType: l.actionType || (l.fileName ? 'file_submission' : 'indicator_search'),
+        hashes
       };
     });
   }
 
   saveAnalysis(analysis: StoredAnalysis): void {
+    this.purgeOldRecords();
     this.analyses.set(analysis.id, analysis);
     this.persist();
   }

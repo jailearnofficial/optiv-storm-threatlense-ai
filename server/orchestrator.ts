@@ -204,7 +204,7 @@ export class Orchestrator {
       rule_score: ruleScore
     };
 
-    // Save to DB
+    // Save to DB with full analyst attribution and file details
     db.saveLookup({
       id: evidenceId,
       indicator,
@@ -212,7 +212,15 @@ export class Orchestrator {
       defanged: defangedValue,
       createdAt: evidence.collected_at,
       evidence,
-      analystName
+      analystName: analystName || 'SOC Analyst',
+      actionType: filePayload ? 'file_submission' : 'indicator_search',
+      fileName: filePayload?.originalname,
+      fileSize: filePayload?.buffer.length,
+      hashes: {
+        sha256: type === 'hash' && indicator.length === 64 ? indicator : related.hashes?.find((h) => h.length === 64),
+        sha1: type === 'hash' && indicator.length === 40 ? indicator : related.hashes?.find((h) => h.length === 40),
+        md5: type === 'hash' && indicator.length === 32 ? indicator : related.hashes?.find((h) => h.length === 32)
+      }
     });
 
     return evidence;

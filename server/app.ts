@@ -63,11 +63,21 @@ export function createApp() {
     });
   });
 
-  // 2. Recent History Endpoint
+  // 2. Recent History Endpoint (Strict 24-Hour Active Retention)
   app.get('/api/history', (req: Request, res: Response) => {
-    const limit = parseInt((req.query.limit as string) || '15', 10);
+    const limit = parseInt((req.query.limit as string) || '50', 10);
     const history = db.listRecentLookups(limit);
-    res.json({ history });
+    res.json({
+      retention_window_hours: 24,
+      total: history.length,
+      history
+    });
+  });
+
+  // Force purge records older than 24 hours
+  app.post('/api/history/purge', (req: Request, res: Response) => {
+    const purged = db.purgeOldRecords();
+    res.json({ message: '24-hour retention purge executed successfully', purged_count: purged });
   });
 
   // 3. Lookup Endpoint
@@ -184,6 +194,17 @@ export function createApp() {
         );
 
         evidence.related.hashes = [sha256, sha1, md5];
+
+        const savedLookup = db.getLookup(evidence.id);
+        if (savedLookup) {
+          savedLookup.analystName = analystName || 'SOC Analyst';
+          savedLookup.fileName = req.file.originalname;
+          savedLookup.fileSize = req.file.size;
+          savedLookup.actionType = 'file_submission';
+          savedLookup.hashes = { md5, sha1, sha256 };
+          savedLookup.evidence = evidence;
+          db.saveLookup(savedLookup);
+        }
 
         return res.json({
           lookup_id: evidence.id,
