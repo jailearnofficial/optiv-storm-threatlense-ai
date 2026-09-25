@@ -175,7 +175,12 @@ export function createApp() {
           'hash',
           true,
           undefined,
-          analystName
+          analystName,
+          {
+            buffer,
+            originalname: req.file.originalname,
+            mimetype: req.file.mimetype
+          }
         );
 
         evidence.related.hashes = [sha256, sha1, md5];

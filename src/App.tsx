@@ -90,6 +90,11 @@ export default function App() {
         setEvidence(data.evidence);
         setIndicator(data.file_info.sha256);
         setSelectedType('hash');
+
+        // Automatically synthesize AI analysis for the submitted file sample
+        if (data.lookup_id) {
+          synthesizeAIForLookup(data.lookup_id, activeAnalyst);
+        }
       } else {
         // Regular JSON lookup
         const res = await fetch('/api/lookup', {
@@ -136,19 +141,17 @@ export default function App() {
     }
   };
 
-  // Handler for Gemini AI triage synthesis
-  const handleAnalyzeAI = async () => {
-    if (!evidence) return;
+  // Helper for synthesizing Gemini AI triage
+  const synthesizeAIForLookup = async (lookupId: string, customAnalyst?: string) => {
     setAnalyzing(true);
     setErrorMessage(null);
-
     try {
-      const activeAnalyst = analystName.trim() || evidence.analyst_name;
+      const activeAnalyst = (customAnalyst !== undefined ? customAnalyst : analystName).trim();
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          lookup_id: evidence.id,
+          lookup_id: lookupId,
           refresh: true,
           analyst_name: activeAnalyst || undefined
         })
@@ -167,6 +170,12 @@ export default function App() {
     } finally {
       setAnalyzing(false);
     }
+  };
+
+  // Handler for manual Gemini AI triage synthesis button
+  const handleAnalyzeAI = async () => {
+    if (!evidence) return;
+    await synthesizeAIForLookup(evidence.id, analystName.trim() || evidence.analyst_name);
   };
 
   // Pivot indicator investigation

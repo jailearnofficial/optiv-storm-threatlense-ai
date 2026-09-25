@@ -19,7 +19,8 @@ import {
   HAAVDetection,
   HAMitreTechnique,
   AlienVaultOTXDetails,
-  OTXPulse
+  OTXPulse,
+  FilePayload
 } from './types.js';
 import { findKnownSample } from './mockFeeds.js';
 
@@ -544,7 +545,7 @@ export class VirusTotalAdapter implements ProviderAdapter {
     return ['hash', 'domain', 'ip', 'url'].includes(type);
   }
 
-  async lookup(indicator: string, type: IndicatorType): Promise<ProviderResult> {
+  async lookup(indicator: string, type: IndicatorType, filePayload?: FilePayload): Promise<ProviderResult> {
     const start = Date.now();
     const apiKey = config.vtApiKey;
 
@@ -608,6 +609,45 @@ export class VirusTotalAdapter implements ProviderAdapter {
       });
 
       if (res.status === 404) {
+        // If an uploaded sample file was provided, actively dispatch it to VirusTotal v3 file upload API
+        if (filePayload?.buffer) {
+          try {
+            const uploadFormData = new FormData();
+            const blob = new Blob([new Uint8Array(filePayload.buffer)], { type: filePayload.mimetype || 'application/octet-stream' });
+            uploadFormData.append('file', blob, filePayload.originalname || 'sample.bin');
+
+            const uploadRes = await fetchWithTimeout('https://www.virustotal.com/api/v3/files', {
+              method: 'POST',
+              headers: { 'x-apikey': apiKey },
+              body: uploadFormData
+            });
+
+            if (uploadRes.ok) {
+              const uploadJson = await uploadRes.json();
+              const analysisId = uploadJson.data?.id || '';
+              return {
+                name: 'virustotal',
+                displayName: 'VirusTotal',
+                status: 'ok',
+                latency_ms: Date.now() - start,
+                score: { malicious: 0, suspicious: 0, harmless: 0, undetected: 0 },
+                headline: `Dispatched to VirusTotal sandbox engines for live file analysis (Analysis ID: ${analysisId.substring(0, 16)}...)`,
+                tags: ['file-uploaded', 'sandbox-queued', 'virustotal-v3'],
+                key_facts: {
+                  analysis_id: analysisId,
+                  submission_status: 'queued',
+                  file_name: filePayload.originalname,
+                  file_size: filePayload.buffer.length
+                },
+                link: `https://www.virustotal.com/gui/file/${encodeURIComponent(indicator)}`,
+                raw: { submission: uploadJson.data }
+              };
+            }
+          } catch (uploadErr) {
+            console.error('VT live file upload error:', uploadErr);
+          }
+        }
+
         return {
           name: 'virustotal',
           displayName: 'VirusTotal',
@@ -950,7 +990,7 @@ export class HybridAnalysisAdapter implements ProviderAdapter {
     return ['hash', 'domain', 'ip', 'url'].includes(type);
   }
 
-  async lookup(indicator: string, type: IndicatorType): Promise<ProviderResult> {
+  async lookup(indicator: string, type: IndicatorType, filePayload?: FilePayload): Promise<ProviderResult> {
     const start = Date.now();
     const apiKey = config.haApiKey;
 
@@ -1023,16 +1063,27 @@ export class HybridAnalysisAdapter implements ProviderAdapter {
     }
 
     try {
-      const res = await fetchWithTimeout('https://www.hybrid-analysis.com/api/v2/search/terms', {
-        method: 'POST',
-        headers: {
-          'api-key': apiKey,
-          'User-Agent': 'Falcon Sandbox',
-          'Content-Type': 'application/x-www-form-urlencoded',
-          Accept: 'application/json'
-        },
-        body: new URLSearchParams({ [type === 'hash' ? 'hash' : 'term']: indicator })
-      });
+      let res: Response;
+      if (type === 'hash') {
+        res = await fetchWithTimeout(`https://www.hybrid-analysis.com/api/v2/overview/${encodeURIComponent(indicator)}`, {
+          headers: {
+            'api-key': apiKey,
+            'User-Agent': 'Falcon Sandbox',
+            Accept: 'application/json'
+          }
+        });
+      } else {
+        res = await fetchWithTimeout('https://www.hybrid-analysis.com/api/v2/search/terms', {
+          method: 'POST',
+          headers: {
+            'api-key': apiKey,
+            'User-Agent': 'Falcon Sandbox',
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Accept: 'application/json'
+          },
+          body: new URLSearchParams({ term: indicator })
+        });
+      }
 
       if (res.status === 404) {
         return {
@@ -1073,7 +1124,7 @@ export class HybridAnalysisAdapter implements ProviderAdapter {
       }
 
       const data = await res.json();
-      const item = Array.isArray(data?.result) ? data.result[0] : data?.result;
+      const item = type === 'hash' ? data : (Array.isArray(data?.result) ? data.result[0] : data?.result);
       if (!item) {
         return {
           name: 'hybrid_analysis',
@@ -1934,7 +1985,7 @@ export class AlienVaultOTXAdapter implements ProviderAdapter {
     return ['hash', 'domain', 'ip', 'url'].includes(type);
   }
 
-  async lookup(indicator: string, type: IndicatorType): Promise<ProviderResult> {
+  async lookup(indicator: string, type: IndicatorType, filePayload?: FilePayload): Promise<ProviderResult> {
     const start = Date.now();
     const apiKey = config.otxApiKey;
 

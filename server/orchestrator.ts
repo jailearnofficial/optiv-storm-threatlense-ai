@@ -9,7 +9,8 @@ import {
   EvidenceObject,
   ProviderAdapter,
   ProviderResult,
-  MitreHint
+  MitreHint,
+  FilePayload
 } from './providers/types.js';
 import {
   VirusTotalAdapter,
@@ -44,7 +45,8 @@ export class Orchestrator {
     type: IndicatorType,
     bypassCache = false,
     onProgress?: (result: ProviderResult) => void,
-    analystName?: string
+    analystName?: string,
+    filePayload?: FilePayload
   ): Promise<EvidenceObject> {
     // Check 15-minute TTL cache per indicator unless bypassCache is requested
     if (!bypassCache) {
@@ -80,7 +82,7 @@ export class Orchestrator {
     // Parallel fan-out with per-provider timeout handled in adapters
     const promises = activeAdapters.map(async (adapter) => {
       try {
-        const result = await adapter.lookup(indicator, type);
+        const result = await adapter.lookup(indicator, type, filePayload);
         if (onProgress) onProgress(result);
         return result;
       } catch (err: any) {

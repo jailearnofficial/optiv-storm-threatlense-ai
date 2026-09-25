@@ -102,46 +102,70 @@ export const SearchConsole: React.FC<SearchConsoleProps> = ({
     }
   }, [showAnalystModal, analystName]);
 
-  const initiateSearchOrSubmission = (submitMode: boolean, file?: File) => {
-    // If submitMode with file upload and analyst name is missing, prompt modal
-    if (submitMode && file && !analystName.trim()) {
-      setPendingAction({ submitMode, file });
+  const handleFileSelected = (file: File) => {
+    if (file.size > 32 * 1024 * 1024) {
+      alert('File size exceeds 32 MB limit.');
+      return;
+    }
+    setSelectedFile(file);
+    setIndicator(`[File] ${file.name}`);
+    setSelectedType('hash');
+    setSubmitToggle(true);
+
+    // If analyst name is missing, prompt modal to collect attribution and immediately dispatch
+    if (!analystName.trim()) {
+      setPendingAction({ submitMode: true, file });
       setShowAnalystModal(true);
+    } else {
+      // Analyst name present: immediately parse and send to VirusTotal, Hybrid Analysis, AlienVault OTX
+      onLookup(true, file);
+    }
+  };
+
+  const initiateSearchOrSubmission = (submitMode: boolean, file?: File) => {
+    const targetFile = file || selectedFile;
+    if (targetFile) {
+      if (!analystName.trim()) {
+        setPendingAction({ submitMode: true, file: targetFile });
+        setShowAnalystModal(true);
+        return;
+      }
+      onLookup(true, targetFile);
       return;
     }
 
-    if (submitMode && file) {
-      onLookup(true, file);
-    } else if (indicator.trim()) {
+    if (indicator.trim()) {
       onLookup(submitMode);
     }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (submitToggle && selectedFile) {
+    if (selectedFile) {
       initiateSearchOrSubmission(true, selectedFile);
     } else if (indicator.trim()) {
       initiateSearchOrSubmission(submitToggle);
     }
   };
 
-  const handleModalSubmit = (e: React.FormEvent) => {
+  const handleModalSubmit = (e: React.FormEvent, skipName = false) => {
     e.preventDefault();
-    const clean = modalInputName.trim();
-    if (!clean) {
-      setModalError('Please enter the SOC analyst name to proceed.');
+    const clean = skipName ? 'SOC Analyst (Active)' : modalInputName.trim();
+    if (!clean && !skipName) {
+      setModalError('Please enter the SOC analyst name to proceed, or click "Continue as Analyst".');
       return;
     }
 
-    setAnalystName(clean);
+    if (clean) {
+      setAnalystName(clean);
+    }
     setShowAnalystModal(false);
 
     // Continue what was set so far
-    const action = pendingAction || { submitMode: submitToggle, file: selectedFile || undefined };
+    const action = pendingAction || { submitMode: true, file: selectedFile || undefined };
     setPendingAction(null);
 
-    if (action.submitMode && action.file) {
+    if (action.file) {
       onLookup(true, action.file);
     } else if (indicator.trim()) {
       onLookup(action.submitMode);
@@ -153,17 +177,7 @@ export const SearchConsole: React.FC<SearchConsoleProps> = ({
     setDragOver(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
-      if (file.size > 32 * 1024 * 1024) {
-        alert('File size exceeds 32 MB limit.');
-        return;
-      }
-      setSelectedFile(file);
-
-      // Check analyst name
-      if (!analystName.trim()) {
-        setPendingAction({ submitMode: true, file });
-        setShowAnalystModal(true);
-      }
+      handleFileSelected(file);
     }
   };
 
@@ -214,8 +228,30 @@ export const SearchConsole: React.FC<SearchConsoleProps> = ({
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-3.5">
+        {/* Hidden File Input for Sample File Analysis */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files && e.target.files[0]) {
+              handleFileSelected(e.target.files[0]);
+            }
+          }}
+        />
+
         {/* Main Search Panel */}
-        <div className="relative rounded-xl bg-slate-900/90 border border-slate-700/80 shadow-[0_4px_25px_rgba(0,0,0,0.5)] p-2 md:p-3 backdrop-blur-md focus-within:border-cyan-500/80 focus-within:shadow-[0_0_20px_rgba(34,211,238,0.15)] transition-all">
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={handleDrop}
+          className={`relative rounded-xl bg-slate-900/90 border shadow-[0_4px_25px_rgba(0,0,0,0.5)] p-2 md:p-3 backdrop-blur-md focus-within:border-cyan-500/80 focus-within:shadow-[0_0_20px_rgba(34,211,238,0.15)] transition-all ${
+            dragOver ? 'border-cyan-400 bg-cyan-950/30' : 'border-slate-700/80'
+          }`}
+        >
           <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2.5">
             {/* Type Selector Dropdown / Segment */}
             <div className="flex items-center gap-1 bg-slate-950/70 p-1 rounded-lg border border-slate-800 text-xs font-mono self-start md:self-auto">
@@ -241,7 +277,7 @@ export const SearchConsole: React.FC<SearchConsoleProps> = ({
                 type="text"
                 value={indicator}
                 onChange={(e) => setIndicator(e.target.value)}
-                placeholder="Enter target file hash, domain, IP, or URL..."
+                placeholder="Enter target file hash, domain, IP, URL, or browse a sample..."
                 className="w-full bg-transparent text-slate-100 placeholder-slate-500 font-mono text-sm md:text-base px-3 py-2 outline-none border-none focus:ring-0"
                 disabled={loading}
               />
@@ -254,16 +290,33 @@ export const SearchConsole: React.FC<SearchConsoleProps> = ({
               )}
             </div>
 
+            {/* Direct Browse Sample File Button */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              title="Browse and parse sample file for VirusTotal, Hybrid Analysis, AlienVault OTX"
+              className="px-3.5 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 border border-slate-700 text-xs font-mono font-medium transition-colors cursor-pointer flex items-center justify-center gap-1.5 shrink-0 shadow-sm"
+            >
+              <UploadCloud className="w-4 h-4 text-cyan-400" />
+              <span className="hidden sm:inline">Browse Sample File</span>
+              <span className="sm:hidden">File</span>
+            </button>
+
             {/* Lookup / Investigate Button */}
             <button
               type="submit"
               disabled={loading || (!indicator.trim() && !selectedFile)}
-              className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-cyan-300 text-slate-950 font-bold text-sm tracking-wide transition-all shadow-[0_0_15px_rgba(34,211,238,0.3)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+              className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-cyan-300 text-slate-950 font-bold text-sm tracking-wide transition-all shadow-[0_0_15px_rgba(34,211,238,0.3)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer shrink-0"
             >
               {loading ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
                   <span>Querying 7 Feeds...</span>
+                </>
+              ) : selectedFile ? (
+                <>
+                  <UploadCloud className="w-4 h-4 text-slate-950" />
+                  <span>Parse & Triage Sample</span>
                 </>
               ) : (
                 <>
@@ -274,8 +327,34 @@ export const SearchConsole: React.FC<SearchConsoleProps> = ({
             </button>
           </div>
 
+          {/* Selected File Details Banner */}
+          {selectedFile && (
+            <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs px-2 text-cyan-300">
+              <div className="flex items-center gap-2 font-mono truncate">
+                <FileText className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <span className="font-semibold truncate">{selectedFile.name}</span>
+                <span className="text-slate-500 text-[11px] shrink-0">
+                  ({(selectedFile.size / 1024).toFixed(1)} KB)
+                </span>
+                <span className="hidden sm:inline text-[10px] px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-400 border border-cyan-800/60 shrink-0">
+                  VirusTotal · Hybrid Analysis · AlienVault OTX
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedFile(null);
+                  setIndicator('');
+                }}
+                className="text-rose-400 hover:text-rose-300 text-[11px] font-mono underline ml-3 shrink-0"
+              >
+                Clear
+              </button>
+            </div>
+          )}
+
           {/* Defanged Preview Strip */}
-          {defangedPreview && (
+          {defangedPreview && !selectedFile && (
             <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs px-2 text-slate-400">
               <div className="flex items-center gap-2 truncate">
                 <span className="text-[11px] text-slate-500 uppercase tracking-wider font-semibold">
@@ -351,26 +430,6 @@ export const SearchConsole: React.FC<SearchConsoleProps> = ({
                   : 'border-slate-700 hover:border-slate-600 bg-slate-900/40'
               }`}
             >
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                onChange={(e) => {
-                  if (e.target.files && e.target.files[0]) {
-                    const f = e.target.files[0];
-                    if (f.size > 32 * 1024 * 1024) {
-                      alert('File exceeds 32 MB limit.');
-                      return;
-                    }
-                    setSelectedFile(f);
-                    if (!analystName.trim()) {
-                      setPendingAction({ submitMode: true, file: f });
-                      setShowAnalystModal(true);
-                    }
-                  }
-                }}
-              />
-
               {selectedFile ? (
                 <div className="flex items-center justify-center gap-3">
                   <FileText className="w-8 h-8 text-cyan-400" />
@@ -469,24 +528,33 @@ export const SearchConsole: React.FC<SearchConsoleProps> = ({
                 )}
               </div>
 
-              <div className="flex items-center justify-end gap-2.5 pt-2">
+              <div className="flex items-center justify-between gap-2.5 pt-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowAnalystModal(false);
-                    setPendingAction(null);
-                  }}
-                  className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+                  onClick={(e) => handleModalSubmit(e, true)}
+                  className="px-3 py-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-xs font-mono transition-colors cursor-pointer"
                 >
-                  Cancel
+                  Skip Name
                 </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold transition-all shadow-[0_0_15px_rgba(34,211,238,0.3)] flex items-center gap-1.5 cursor-pointer"
-                >
-                  <span>Continue Investigation</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAnalystModal(false);
+                      setPendingAction(null);
+                    }}
+                    className="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold transition-all shadow-[0_0_15px_rgba(34,211,238,0.3)] flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span>Analyze</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             </form>
           </div>

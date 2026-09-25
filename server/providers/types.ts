@@ -250,10 +250,16 @@ export interface EvidenceObject {
   rule_score: RuleScoreResult;
 }
 
+export interface FilePayload {
+  buffer: Buffer;
+  originalname: string;
+  mimetype?: string;
+}
+
 export interface ProviderAdapter {
   name: ProviderName;
   displayName: string;
   supports(type: IndicatorType): boolean;
-  lookup(indicator: string, type: IndicatorType): Promise<ProviderResult>;
+  lookup(indicator: string, type: IndicatorType, filePayload?: FilePayload): Promise<ProviderResult>;
   submit?(indicator: string, type: IndicatorType, options?: any): Promise<any>;
 }
