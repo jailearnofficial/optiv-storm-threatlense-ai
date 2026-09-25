@@ -20,15 +20,18 @@ import { ReportModal } from './components/ReportModal.js';
 import { VirusTotalDeepDive } from './components/VirusTotalDeepDive.js';
 import { HybridAnalysisDeepDive } from './components/HybridAnalysisDeepDive.js';
 import { AlienVaultOTXDeepDive } from './components/AlienVaultOTXDeepDive.js';
+import { LoginGate } from './components/LoginGate.js';
+import { AuthProvider, useAuth } from './context/AuthContext.js';
 import {
   EvidenceObject,
   ProviderResult,
   AIAnalysisVerdict,
   IndicatorType
 } from './types/index.js';
-import { FileText, ShieldAlert, CheckCircle2, Download, AlertCircle, Network, Cpu, Radio, ChevronDown, ChevronUp } from 'lucide-react';
+import { FileText, ShieldAlert, CheckCircle2, Download, AlertCircle, Network, Cpu, Radio, ChevronDown, ChevronUp, Lock } from 'lucide-react';
 
-export default function App() {
+function Dashboard() {
+  const { user, loading: authLoading } = useAuth();
   const [indicator, setIndicator] = useState<string>('');
   const [selectedType, setSelectedType] = useState<string>('auto');
   const [analystName, setAnalystName] = useState<string>('');
@@ -50,9 +53,13 @@ export default function App() {
   const [providerHealth, setProviderHealth] = useState<Record<string, { configured: boolean; status: string }>>({});
 
   useEffect(() => {
-    try {
-      localStorage.removeItem('soc_analyst_name');
-    } catch {}
+    if (user) {
+      const defaultName = user.displayName || user.email?.split('@')[0] || 'SOC Analyst';
+      setAnalystName((prev) => (prev.trim() ? prev : defaultName));
+    }
+  }, [user]);
+
+  useEffect(() => {
     fetch('/api/health')
       .then((res) => res.json())
       .then((data) => {
@@ -215,6 +222,34 @@ export default function App() {
       console.error(err);
     }
   };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#070A10] text-slate-100 flex flex-col items-center justify-center p-6 relative overflow-hidden font-sans">
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b0f_1px,transparent_1px),linear-gradient(to_bottom,#1e293b0f_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none" />
+        <div className="relative z-10 flex flex-col items-center gap-4 text-center">
+          <div className="relative flex items-center justify-center w-14 h-14 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 shadow-[0_0_25px_rgba(34,211,238,0.2)]">
+            <ShieldAlert className="w-7 h-7 text-cyan-400 animate-pulse" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-slate-100 uppercase tracking-wider">
+              OPTIV S.T.O.R.M ThreatLense AI
+            </h2>
+            <p className="text-xs text-slate-400 font-mono mt-1">
+              Verifying SOC Analyst Authorization & Session...
+            </p>
+          </div>
+          <div className="w-48 h-1 bg-slate-800 rounded-full overflow-hidden mt-2">
+            <div className="w-full h-full bg-gradient-to-r from-cyan-500 to-violet-500 animate-pulse" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginGate />;
+  }
 
   return (
     <div className="relative min-h-screen bg-[#0A0E17] text-slate-100 flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200">
@@ -488,5 +523,13 @@ export default function App() {
         onClose={() => setReportModalId(null)}
       />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <Dashboard />
+    </AuthProvider>
   );
 }

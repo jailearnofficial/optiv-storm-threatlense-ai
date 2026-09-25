@@ -3,8 +3,11 @@ import {
   ShieldAlert,
   Radio,
   History,
-  Sparkles
+  Sparkles,
+  LogOut,
+  UserCheck
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext.js';
 
 interface HeaderProps {
   onOpenHistory: () => void;
@@ -15,6 +18,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenHistory,
   providerHealth
 }) => {
+  const { user, signOut } = useAuth();
   const providers = [
     { key: 'virustotal', label: 'VT', full: 'VirusTotal v3' },
     { key: 'hybrid_analysis', label: 'HA', full: 'Hybrid Analysis' },
@@ -24,6 +28,8 @@ export const Header: React.FC<HeaderProps> = ({
     { key: 'urlscan', label: 'US', full: 'urlscan.io' },
     { key: 'alienvault_otx', label: 'OTX', full: 'AlienVault OTX' }
   ];
+
+  const analystDisplayName = user?.displayName || user?.email?.split('@')[0] || 'SOC Analyst';
 
   return (
     <header className="relative z-20 border-b border-slate-800/80 bg-[#0A0E17]/90 backdrop-blur-md px-4 lg:px-8 py-3.5 transition-all">
@@ -90,15 +96,49 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Right actions: History */}
+        {/* Right actions: History & User Info / Sign Out */}
         <div className="flex items-center gap-2.5">
           <button
             onClick={onOpenHistory}
             className="px-3.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-xs font-medium text-slate-200 transition-all flex items-center gap-1.5 hover:border-cyan-500/40 cursor-pointer shadow-sm"
           >
             <History className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Investigation History</span>
+            <span className="hidden sm:inline">Investigation History</span>
+            <span className="sm:hidden">History</span>
           </button>
+
+          {/* Authenticated Analyst Badge & Sign Out */}
+          {user && (
+            <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
+              <div className="flex items-center gap-2 py-1 px-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                {user.photoURL ? (
+                  <img
+                    src={user.photoURL}
+                    alt={analystDisplayName}
+                    className="w-5 h-5 rounded-full border border-cyan-400/40 object-cover"
+                  />
+                ) : (
+                  <UserCheck className="w-4 h-4 text-cyan-400" />
+                )}
+                <div className="flex flex-col text-left">
+                  <span className="text-xs font-semibold text-slate-200 truncate max-w-[120px] font-mono leading-none">
+                    {analystDisplayName}
+                  </span>
+                  <span className="text-[9px] text-cyan-400 font-mono mt-0.5 leading-none">
+                    SOC Analyst
+                  </span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => signOut()}
+                title="Sign out of SOC console"
+                className="p-2 rounded-lg bg-slate-800/80 hover:bg-rose-950/80 border border-slate-700 hover:border-rose-800 text-slate-400 hover:text-rose-300 transition-colors cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>

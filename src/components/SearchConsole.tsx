@@ -16,6 +16,7 @@ import {
   X
 } from 'lucide-react';
 import { IndicatorType } from '../types/index.js';
+import { useAuth } from '../context/AuthContext.js';
 
 interface SearchConsoleProps {
   indicator: string;
@@ -38,6 +39,7 @@ export const SearchConsole: React.FC<SearchConsoleProps> = ({
   analystName,
   setAnalystName
 }) => {
+  const { user } = useAuth();
   const [submitToggle, setSubmitToggle] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [detectedType, setDetectedType] = useState<IndicatorType>('domain');
@@ -212,7 +214,7 @@ export const SearchConsole: React.FC<SearchConsoleProps> = ({
           {analystName.trim() ? (
             <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-1.5 py-0.5 rounded">
               <UserCheck className="w-3 h-3" />
-              Verified
+              <span>{user ? 'Authenticated' : 'Verified'}</span>
             </span>
           ) : (
             <span className="text-[10px] font-mono text-amber-300 bg-amber-950/60 border border-amber-700/60 px-1.5 py-0.5 rounded">
