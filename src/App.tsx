@@ -74,30 +74,53 @@ function Dashboard() {
   // Provider health from /api/health
   const [providerHealth, setProviderHealth] = useState<Record<string, { configured: boolean; status: string }>>({});
   // Recent investigation updates for Command Center stream (shared across all analysts)
-  const [historyList, setHistoryList] = useState<HistoryItemDTO[]>([]);
+  const [historyList, setHistoryList] = useState<HistoryItemDTO[]>(() => {
+    try {
+      const cached = localStorage.getItem('threatlense_history_cache');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  });
   const [historyLoading, setHistoryLoading] = useState<boolean>(false);
 
-  const loadHistory = async () => {
+  const loadHistory = async (retries = 2) => {
     setHistoryLoading(true);
-    try {
-      const res = await fetch('/api/history?limit=50');
-      if (res.ok) {
-        const data = await res.json();
-        const list = Array.isArray(data) ? data : (data.history || []);
-        setHistoryList(list);
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        const res = await fetch('/api/history?limit=50', { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+          const data = await res.json();
+          const list = Array.isArray(data) ? data : (data.history || []);
+          setHistoryList(list);
+          try {
+            localStorage.setItem('threatlense_history_cache', JSON.stringify(list));
+          } catch {}
+          setHistoryLoading(false);
+          return;
+        }
+      } catch (err: any) {
+        if (attempt < retries) {
+          await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+          continue;
+        }
+        console.warn('Investigation history service temporarily offline, using cached records:', err?.message || err);
       }
-    } catch (err) {
-      console.error('History load error:', err);
-    } finally {
-      setHistoryLoading(false);
     }
+    setHistoryLoading(false);
   };
 
   useEffect(() => {
     loadHistory();
     // Auto-sync history every 15s to keep all users in sync
     const interval = setInterval(() => {
-      loadHistory();
+      loadHistory(1);
     }, 15000);
     return () => clearInterval(interval);
   }, []);
@@ -118,12 +141,18 @@ function Dashboard() {
   }, [user]);
 
   useEffect(() => {
-    fetch('/api/health')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.providers) setProviderHealth(data.providers);
-      })
-      .catch((err) => console.error('Health check failed:', err));
+    const fetchHealth = async () => {
+      try {
+        const res = await fetch('/api/health');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.providers) setProviderHealth(data.providers);
+        }
+      } catch (err) {
+        console.warn('Health check probe warning:', err);
+      }
+    };
+    fetchHealth();
   }, []);
 
   // Handler for lookup execution

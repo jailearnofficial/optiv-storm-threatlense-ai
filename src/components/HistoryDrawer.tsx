@@ -74,27 +74,51 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
   onClose,
   onSelectLookup
 }) => {
-  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [history, setHistory] = useState<HistoryItem[]>(() => {
+    try {
+      const cached = localStorage.getItem('threatlense_history_cache');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  });
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [retentionNotice, setRetentionNotice] = useState<string>('24-Hour Active Retention Window');
 
-  const fetchHistory = async () => {
+  const fetchHistory = async (retries = 2) => {
     setLoading(true);
-    try {
-      const res = await fetch('/api/history?limit=50');
-      if (res.ok) {
-        const data = await res.json();
-        setHistory(data.history || []);
-        if (data.retention_window_hours) {
-          setRetentionNotice(`${data.retention_window_hours}-Hour Active Retention Window`);
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        const res = await fetch('/api/history?limit=50', { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+          const data = await res.json();
+          const items = data.history || [];
+          setHistory(items);
+          try {
+            localStorage.setItem('threatlense_history_cache', JSON.stringify(items));
+          } catch {}
+          if (data.retention_window_hours) {
+            setRetentionNotice(`${data.retention_window_hours}-Hour Active Retention Window`);
+          }
+          setLoading(false);
+          return;
         }
+      } catch (err: any) {
+        if (attempt < retries) {
+          await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+          continue;
+        }
+        console.warn('History drawer using cached local investigations:', err?.message || err);
       }
-    } catch (err) {
-      console.error('Failed to load history:', err);
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -142,7 +166,7 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
               </div>
               <div className="flex items-center gap-1.5">
                 <button
-                  onClick={fetchHistory}
+                  onClick={() => fetchHistory()}
                   className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
                   title="Refresh history"
                 >

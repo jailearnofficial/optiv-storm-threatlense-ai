@@ -40,8 +40,11 @@ export function createApp() {
     return typeof id === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(id);
   }
 
-  // Security headers
+  // Security and CORS headers
   app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('X-XSS-Protection', '1; mode=block');
@@ -50,6 +53,10 @@ export function createApp() {
       'Content-Security-Policy',
       "frame-ancestors 'self' https://*.google.com https://*.run.app https://*.googleusercontent.com https://*.vercel.app;"
     );
+
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end();
+    }
     next();
   });
 
