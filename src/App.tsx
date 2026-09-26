@@ -58,6 +58,18 @@ function Dashboard() {
   const [historyOpen, setHistoryOpen] = useState<boolean>(false);
   const [reportModalId, setReportModalId] = useState<string | null>(null);
   const [siemModalOpen, setSiemModalOpen] = useState<boolean>(false);
+  const [activeSiemCount, setActiveSiemCount] = useState<number>(() => {
+    try {
+      const stored = localStorage.getItem('threatlense_siem_connectors');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return Array.isArray(parsed)
+          ? parsed.filter((c: any) => c.enabled && Boolean(c.endpoint?.trim())).length
+          : 0;
+      }
+    } catch {}
+    return 0;
+  });
 
   // Provider health from /api/health
   const [providerHealth, setProviderHealth] = useState<Record<string, { configured: boolean; status: string }>>({});
@@ -337,6 +349,7 @@ function Dashboard() {
       <Header
         onOpenHistory={() => setHistoryOpen(true)}
         onOpenSiemSoar={() => setSiemModalOpen(true)}
+        activeSiemCount={activeSiemCount}
         providerHealth={providerHealth}
       />
 
@@ -792,6 +805,7 @@ function Dashboard() {
       <SiemSoarModal
         isOpen={siemModalOpen}
         onClose={() => setSiemModalOpen(false)}
+        onConnectorsUpdated={setActiveSiemCount}
       />
     </div>
   );

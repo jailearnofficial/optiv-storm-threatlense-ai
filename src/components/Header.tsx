@@ -17,12 +17,14 @@ import { useAuth } from '../context/AuthContext.js';
 interface HeaderProps {
   onOpenHistory: () => void;
   onOpenSiemSoar?: () => void;
+  activeSiemCount?: number;
   providerHealth: Record<string, { configured: boolean; status: string }>;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   onOpenHistory,
   onOpenSiemSoar,
+  activeSiemCount = 0,
   providerHealth
 }) => {
   const { user, signOut } = useAuth();
@@ -122,12 +124,25 @@ export const Header: React.FC<HeaderProps> = ({
           {onOpenSiemSoar && (
             <button
               onClick={onOpenSiemSoar}
-              className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-cyan-950/80 to-slate-900 hover:from-cyan-900/90 hover:to-slate-800 border border-cyan-500/40 hover:border-cyan-400 text-xs font-medium text-cyan-200 transition-all flex items-center gap-1.5 cursor-pointer shadow-[0_0_12px_rgba(34,211,238,0.15)] group"
+              className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer shadow-sm group ${
+                activeSiemCount > 0
+                  ? 'bg-gradient-to-r from-cyan-950/80 to-slate-900 hover:from-cyan-900/90 hover:to-slate-800 border-cyan-500/40 hover:border-cyan-400 text-cyan-200 shadow-[0_0_12px_rgba(34,211,238,0.15)]'
+                  : 'bg-slate-900/90 hover:bg-slate-800 border-slate-700/80 hover:border-slate-600 text-slate-300'
+              }`}
               title="Configure Enterprise SIEM & SOAR Connectors"
             >
               <Cable className="w-3.5 h-3.5 text-cyan-400 group-hover:rotate-12 transition-transform" />
               <span className="font-semibold">SIEM / SOAR</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
+              {activeSiemCount > 0 ? (
+                <span className="flex items-center gap-1 font-mono text-[10px] text-emerald-300 bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-800/80 ml-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  {activeSiemCount}
+                </span>
+              ) : (
+                <span className="text-[10px] font-mono text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700 ml-0.5">
+                  Configure
+                </span>
+              )}
             </button>
           )}
 
@@ -216,9 +231,15 @@ export const Header: React.FC<HeaderProps> = ({
                             </span>
                           </div>
                         </div>
-                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
-                          Active
-                        </span>
+                        {activeSiemCount > 0 ? (
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+                            {activeSiemCount} Active
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                            Configure
+                          </span>
+                        )}
                       </button>
                     )}
 
