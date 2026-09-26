@@ -25,6 +25,7 @@ import { ThreatGraphPanel } from './components/ThreatGraphPanel.js';
 import { NetworkEnrichmentPanel } from './components/NetworkEnrichmentPanel.js';
 import { DetectionRulesPanel } from './components/DetectionRulesPanel.js';
 import { InvestigationHistoryFeed } from './components/InvestigationHistoryFeed.js';
+import { CyberWarfareHUD } from './components/cyber/CyberWarfareHUD.js';
 import { LoginGate } from './components/LoginGate.js';
 import { AuthProvider, useAuth } from './context/AuthContext.js';
 import {
@@ -52,6 +53,7 @@ function Dashboard() {
   const [showThreatGraph, setShowThreatGraph] = useState<boolean>(true);
   const [showNetworkEnrichment, setShowNetworkEnrichment] = useState<boolean>(true);
   const [showDetectionRules, setShowDetectionRules] = useState<boolean>(true);
+  const [showCyberWarfare, setShowCyberWarfare] = useState<boolean>(true);
 
   // Modals & Drawers state
   const [inspectProvider, setInspectProvider] = useState<ProviderResult | null>(null);
@@ -380,6 +382,8 @@ function Dashboard() {
         onOpenSiemSoar={() => setSiemModalOpen(true)}
         activeSiemCount={activeSiemCount}
         providerHealth={providerHealth}
+        onToggleCyberWarfare={() => setShowCyberWarfare(!showCyberWarfare)}
+        isCyberWarfareActive={showCyberWarfare}
       />
 
       {/* Main Content Area (Classic SOC View) */}
@@ -433,6 +437,17 @@ function Dashboard() {
             <span className="text-[11px] font-mono text-slate-400">
               Active Investigation: <span className="text-cyan-300 font-semibold">{evidence.id}</span>
             </span>
+          </div>
+        )}
+
+        {/* Cyber Warfare Global Monitoring HUD (Visible in Standby) */}
+        {showCyberWarfare && !evidence && !lookupLoading && (
+          <div className="relative z-10 max-w-5xl mx-auto px-4 mb-6">
+            <CyberWarfareHUD
+              evidence={null}
+              analysis={null}
+              defaultExpanded={true}
+            />
           </div>
         )}
 
@@ -529,6 +544,18 @@ function Dashboard() {
                 <span>Force Live Re-Scan</span>
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Cyber Warfare HUD (Attack Globe, 360° Radar & Kill Chain for Active Investigation) */}
+        {showCyberWarfare && evidence && (
+          <div className="relative z-10 max-w-5xl mx-auto px-4 mb-6">
+            <CyberWarfareHUD
+              evidence={evidence}
+              analysis={analysis}
+              onSelectProvider={(p) => setInspectProvider(p)}
+              defaultExpanded={true}
+            />
           </div>
         )}
 

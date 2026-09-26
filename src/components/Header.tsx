@@ -10,7 +10,9 @@ import {
   ChevronDown,
   Key,
   ShieldCheck,
-  Sliders
+  Sliders,
+  Globe,
+  Crosshair
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
 
@@ -19,13 +21,17 @@ interface HeaderProps {
   onOpenSiemSoar?: () => void;
   activeSiemCount?: number;
   providerHealth: Record<string, { configured: boolean; status: string }>;
+  onToggleCyberWarfare?: () => void;
+  isCyberWarfareActive?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   onOpenHistory,
   onOpenSiemSoar,
   activeSiemCount = 0,
-  providerHealth
+  providerHealth,
+  onToggleCyberWarfare,
+  isCyberWarfareActive = false
 }) => {
   const { user, signOut } = useAuth();
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
@@ -120,6 +126,28 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right actions: History, SIEM/SOAR Button & Interactive Profile Menu */}
         <div className="flex items-center gap-2.5">
+          {/* Cyber Warfare Visuals HUD Button */}
+          {onToggleCyberWarfare && (
+            <button
+              onClick={onToggleCyberWarfare}
+              className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm group ${
+                isCyberWarfareActive
+                  ? 'bg-gradient-to-r from-cyan-950 via-slate-900 to-rose-950/80 border-cyan-400 text-cyan-200 shadow-[0_0_15px_rgba(34,211,238,0.25)]'
+                  : 'bg-slate-900/90 hover:bg-slate-850 border-slate-700/80 text-slate-300 hover:text-cyan-300 hover:border-cyan-500/50'
+              }`}
+              title="Toggle Cyber Threat Intelligence Warfare Visuals (Globe, Radar & Kill-Chain)"
+            >
+              <Globe className="w-3.5 h-3.5 text-cyan-400 group-hover:rotate-45 transition-transform" />
+              <span className="hidden md:inline">Cyber Warfare HUD</span>
+              <span className="md:hidden">Warfare</span>
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  isCyberWarfareActive ? 'bg-cyan-400 animate-ping' : 'bg-slate-500'
+                }`}
+              />
+            </button>
+          )}
+
           {/* SIEM & SOAR Integration Quick Button */}
           {onOpenSiemSoar && (
             <button
@@ -214,6 +242,35 @@ export const Header: React.FC<HeaderProps> = ({
 
                   {/* Integration Menu Items */}
                   <div className="p-1 space-y-0.5 text-xs font-medium">
+                    {onToggleCyberWarfare && (
+                      <button
+                        onClick={() => {
+                          setProfileDropdownOpen(false);
+                          onToggleCyberWarfare();
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-cyan-950/60 hover:text-cyan-300 flex items-center justify-between transition-colors cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Globe className="w-4 h-4 text-cyan-400 group-hover:rotate-45 transition-transform" />
+                          <div>
+                            <span className="block font-semibold">Cyber Warfare Visuals HUD</span>
+                            <span className="text-[10px] text-slate-400 font-normal">
+                              Attack Globe, 360° Radar & Kill-Chain
+                            </span>
+                          </div>
+                        </div>
+                        <span
+                          className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
+                            isCyberWarfareActive
+                              ? 'bg-cyan-950 text-cyan-300 border-cyan-800'
+                              : 'bg-slate-800 text-slate-400 border-slate-700'
+                          }`}
+                        >
+                          {isCyberWarfareActive ? 'Active' : 'Open'}
+                        </span>
+                      </button>
+                    )}
+
                     {onOpenSiemSoar && (
                       <button
                         onClick={() => {
