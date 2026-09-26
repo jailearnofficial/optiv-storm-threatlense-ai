@@ -17,6 +17,7 @@ import { MitreAttackMatrix } from './components/MitreAttackMatrix.js';
 import { IocTable } from './components/IocTable.js';
 import { HistoryDrawer } from './components/HistoryDrawer.js';
 import { ReportModal } from './components/ReportModal.js';
+import { SiemSoarModal } from './components/SiemSoarModal.js';
 import { VirusTotalDeepDive } from './components/VirusTotalDeepDive.js';
 import { HybridAnalysisDeepDive } from './components/HybridAnalysisDeepDive.js';
 import { AlienVaultOTXDeepDive } from './components/AlienVaultOTXDeepDive.js';
@@ -56,6 +57,7 @@ function Dashboard() {
   const [inspectProvider, setInspectProvider] = useState<ProviderResult | null>(null);
   const [historyOpen, setHistoryOpen] = useState<boolean>(false);
   const [reportModalId, setReportModalId] = useState<string | null>(null);
+  const [siemModalOpen, setSiemModalOpen] = useState<boolean>(false);
 
   // Provider health from /api/health
   const [providerHealth, setProviderHealth] = useState<Record<string, { configured: boolean; status: string }>>({});
@@ -334,6 +336,7 @@ function Dashboard() {
       {/* Header bar with live provider health dots */}
       <Header
         onOpenHistory={() => setHistoryOpen(true)}
+        onOpenSiemSoar={() => setSiemModalOpen(true)}
         providerHealth={providerHealth}
       />
 
@@ -783,6 +786,12 @@ function Dashboard() {
         analysisId={reportModalId}
         analystName={analysis?.analyst_name || evidence?.analyst_name || analystName}
         onClose={() => setReportModalId(null)}
+      />
+
+      {/* Enterprise SIEM & SOAR Integration Hub Modal */}
+      <SiemSoarModal
+        isOpen={siemModalOpen}
+        onClose={() => setSiemModalOpen(false)}
       />
     </div>
   );
