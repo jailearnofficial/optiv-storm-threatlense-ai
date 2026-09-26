@@ -220,6 +220,137 @@ function renderVTGraphSvg(graph?: VirusTotalGraphData): string {
   `;
 }
 
+function renderRecommendedActionsTable(actions: string[]): string {
+  if (!actions || actions.length === 0) {
+    return '<p style="font-size: 11px; color: #64748b; font-style: italic; margin-top: 4px;">No immediate incident response actions designated.</p>';
+  }
+
+  const rows = actions.map((rawAction, idx) => {
+    // Strip leading numbering e.g. "1. " or "1) "
+    const cleanAction = rawAction.replace(/^\d+[\.\)]\s*/, '').trim();
+
+    let domain = '';
+    let procedure = cleanAction;
+
+    const colonIdx = cleanAction.indexOf(':');
+    if (colonIdx > 0 && colonIdx < 45) {
+      domain = cleanAction.substring(0, colonIdx).trim();
+      procedure = cleanAction.substring(colonIdx + 1).trim();
+    } else {
+      if (/perimeter|egress|firewall|proxy|edl|border|network|dns/i.test(cleanAction)) {
+        domain = 'Perimeter & Egress';
+      } else if (/edr|endpoint|falcon|defender|memory|mutex|process|antivirus/i.test(cleanAction)) {
+        domain = 'EDR & Endpoint';
+      } else if (/siem|splunk|sentinel|hunt|beacon|query|log/i.test(cleanAction)) {
+        domain = 'SIEM Threat Hunting';
+      } else if (/contain|isolate|quarantine|credential|reset|eradication/i.test(cleanAction)) {
+        domain = 'Containment & Eradication';
+      } else if (/patch|vulnerability|update|remediat/i.test(cleanAction)) {
+        domain = 'Remediation & Patching';
+      } else {
+        domain = `Response Phase ${idx + 1}`;
+      }
+    }
+
+    // Determine Priority and SLA
+    let priority = 'P2 - High';
+    let priorityBadge = 'badge-suspicious';
+    let sla = '< 2 Hours';
+
+    const textLower = cleanAction.toLowerCase();
+    if (
+      idx === 0 ||
+      textLower.includes('perimeter') ||
+      textLower.includes('block') ||
+      textLower.includes('isolate') ||
+      textLower.includes('quarantine') ||
+      textLower.includes('ban') ||
+      textLower.includes('immediate')
+    ) {
+      priority = 'P1 - Critical';
+      priorityBadge = 'badge-malicious';
+      sla = 'Immediate (< 1h)';
+    } else if (
+      textLower.includes('edr') ||
+      textLower.includes('endpoint') ||
+      textLower.includes('siem') ||
+      textLower.includes('hunt') ||
+      textLower.includes('sweep')
+    ) {
+      priority = 'P2 - High';
+      priorityBadge = 'badge-suspicious';
+      sla = '< 4 Hours';
+    } else if (
+      textLower.includes('credential') ||
+      textLower.includes('reset') ||
+      textLower.includes('patch') ||
+      textLower.includes('audit')
+    ) {
+      priority = 'P2 - High';
+      priorityBadge = 'badge-suspicious';
+      sla = '< 8 Hours';
+    } else {
+      priority = 'P3 - Medium';
+      priorityBadge = 'badge-clean';
+      sla = '< 24 Hours';
+    }
+
+    // Escape and highlight MD5, SHA-1, SHA-256 hashes cleanly
+    const escapedProc = escapeHtml(procedure)
+      // SHA-256 (64 hex characters)
+      .replace(/\b([a-fA-F0-9]{64})\b/g, '<code class="monospace" style="background: #f1f5f9; padding: 1.5px 5px; border-radius: 4px; border: 1px solid #cbd5e1; font-size: 10px; color: #0f172a; word-break: break-all;">$1</code>')
+      // SHA-1 (40 hex characters)
+      .replace(/\b([a-fA-F0-9]{40})\b/g, '<code class="monospace" style="background: #f1f5f9; padding: 1.5px 5px; border-radius: 4px; border: 1px solid #cbd5e1; font-size: 10px; color: #0f172a; word-break: break-all;">$1</code>')
+      // MD5 (32 hex characters)
+      .replace(/\b([a-fA-F0-9]{32})\b/g, '<code class="monospace" style="background: #f1f5f9; padding: 1.5px 5px; border-radius: 4px; border: 1px solid #cbd5e1; font-size: 10px; color: #0f172a; word-break: break-all;">$1</code>');
+
+    const stepNum = idx < 9 ? `0${idx + 1}` : `${idx + 1}`;
+
+    return `
+      <tr style="${idx % 2 === 1 ? 'background: #f8fafc;' : 'background: #ffffff;'}">
+        <td style="text-align: center; vertical-align: top; font-family: monospace; font-weight: 700; color: #64748b; font-size: 11px; padding: 9px 6px;">
+          ${stepNum}
+        </td>
+        <td style="vertical-align: top; padding: 9px 10px; width: 175px;">
+          <div style="font-weight: 700; color: #0f172a; font-size: 11px; margin-bottom: 2px;">
+            ${escapeHtml(domain)}
+          </div>
+          <div style="font-size: 9.5px; color: #64748b; text-transform: uppercase; font-family: sans-serif; letter-spacing: 0.3px;">
+            SOC Playbook
+          </div>
+        </td>
+        <td style="vertical-align: top; text-align: center; padding: 9px 8px; width: 125px;">
+          <span class="badge ${priorityBadge}" style="display: inline-block; font-size: 9.5px; font-weight: 700; padding: 2px 7px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.3px;">
+            ${priority}
+          </span>
+          <div style="font-size: 9.5px; color: #64748b; margin-top: 3px; font-family: monospace;">
+            ${sla}
+          </div>
+        </td>
+        <td style="vertical-align: top; padding: 9px 12px; line-height: 1.6; color: #1e293b; font-size: 11px; word-break: break-word; overflow-wrap: anywhere;">
+          ${escapedProc}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <table style="width: 100%; border-collapse: collapse; margin-top: 8px; margin-bottom: 18px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden;">
+      <thead>
+        <tr style="background: #f1f5f9; border-bottom: 2px solid #cbd5e1;">
+          <th style="width: 38px; text-align: center; padding: 8px 6px; font-size: 10px; text-transform: uppercase; color: #475569; letter-spacing: 0.5px;">#</th>
+          <th style="width: 175px; text-align: left; padding: 8px 10px; font-size: 10px; text-transform: uppercase; color: #475569; letter-spacing: 0.5px;">IR Phase / Domain</th>
+          <th style="width: 125px; text-align: center; padding: 8px 8px; font-size: 10px; text-transform: uppercase; color: #475569; letter-spacing: 0.5px;">Priority & SLA</th>
+          <th style="text-align: left; padding: 8px 12px; font-size: 10px; text-transform: uppercase; color: #475569; letter-spacing: 0.5px;">Prescribed Mitigation & Countermeasure Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows}
+      </tbody>
+    </table>
+  `;
+}
+
 export function generateHtmlReport(analysis: AIAnalysisVerdict, lookup: StoredLookup): string {
   const evidence = lookup.evidence;
   const verdictColors: Record<string, { bg: string; text: string; border: string }> = {
@@ -370,6 +501,7 @@ export function generateHtmlReport(analysis: AIAnalysisVerdict, lookup: StoredLo
       border: 1px solid #e2e8f0;
       padding: 6px 8px;
       text-align: left;
+      vertical-align: top;
     }
     th {
       background: #f1f5f9;
@@ -495,9 +627,7 @@ export function generateHtmlReport(analysis: AIAnalysisVerdict, lookup: StoredLo
   </p>
 
   <h2>2. Recommended Incident Response Actions</h2>
-  <ol style="margin-top: 4px; padding-left: 18px; color: #1e293b; line-height: 1.6;">
-    ${analysis.recommended_actions.map((act) => `<li><strong>${escapeHtml(act)}</strong></li>`).join('')}
-  </ol>
+  ${renderRecommendedActionsTable(analysis.recommended_actions)}
 
   ${haDetails ? `
     <h2>3. Hybrid Analysis (Falcon Sandbox) Detailed Assessment</h2>

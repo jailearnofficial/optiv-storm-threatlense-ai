@@ -165,21 +165,75 @@ export const VerdictBanner: React.FC<VerdictBannerProps> = ({ analysis }) => {
         {/* Recommended Actions */}
         {analysis.recommended_actions.length > 0 && (
           <div className="mt-5">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 mb-2 flex items-center gap-1.5">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 mb-2.5 flex items-center gap-1.5">
               <Target className="w-3.5 h-3.5 text-rose-400" />
-              Immediate Incident Response Actions
+              Immediate Incident Response Actions & Playbook
             </h3>
-            <ul className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-slate-200">
-              {analysis.recommended_actions.map((action, i) => (
-                <li
-                  key={i}
-                  className="flex items-start gap-2 p-2.5 rounded-lg bg-slate-950/50 border border-slate-800"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0 mt-1.5" />
-                  <span>{action}</span>
-                </li>
-              ))}
-            </ul>
+
+            <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/60 shadow-inner">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 bg-slate-900/80 text-[10px] uppercase font-mono text-slate-400">
+                    <th className="py-2.5 px-3 w-10 text-center">#</th>
+                    <th className="py-2.5 px-3 w-44">IR Phase / Domain</th>
+                    <th className="py-2.5 px-3 w-36 text-center">Priority & SLA</th>
+                    <th className="py-2.5 px-3">Prescribed Mitigation & Countermeasure</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 font-sans">
+                  {analysis.recommended_actions.map((rawAction, i) => {
+                    const cleanAction = rawAction.replace(/^\d+[\.\)]\s*/, '').trim();
+                    let domain = '';
+                    let procedure = cleanAction;
+                    const colonIdx = cleanAction.indexOf(':');
+                    if (colonIdx > 0 && colonIdx < 45) {
+                      domain = cleanAction.substring(0, colonIdx).trim();
+                      procedure = cleanAction.substring(colonIdx + 1).trim();
+                    } else {
+                      domain = `Action ${i + 1}`;
+                    }
+
+                    const isP1 = i === 0 || /perimeter|block|isolate|quarantine|ban|immediate/i.test(cleanAction);
+                    const isP2 = /edr|endpoint|siem|hunt|sweep|credential|reset|patch/i.test(cleanAction);
+
+                    return (
+                      <tr key={i} className="hover:bg-slate-900/40 transition-colors">
+                        <td className="py-2.5 px-3 text-center align-top font-mono font-bold text-slate-500 text-[11px]">
+                          0{i + 1}
+                        </td>
+                        <td className="py-2.5 px-3 align-top">
+                          <span className="font-semibold text-slate-200 block text-xs">
+                            {domain}
+                          </span>
+                          <span className="text-[10px] font-mono text-slate-500 uppercase">
+                            SOC Protocol
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 align-top text-center">
+                          <span
+                            className={`inline-block text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded border ${
+                              isP1
+                                ? 'bg-rose-950/80 text-rose-300 border-rose-700/60'
+                                : isP2
+                                ? 'bg-amber-950/80 text-amber-300 border-amber-700/60'
+                                : 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60'
+                            }`}
+                          >
+                            {isP1 ? 'P1 - Immediate' : isP2 ? 'P2 - High' : 'P3 - Medium'}
+                          </span>
+                          <div className="text-[10px] font-mono text-slate-500 mt-0.5">
+                            {isP1 ? '< 1 Hour' : isP2 ? '< 4 Hours' : '< 24 Hours'}
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 align-top text-slate-300 leading-relaxed text-xs break-words">
+                          {procedure}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
