@@ -309,29 +309,6 @@ export interface AIAnalysisVerdict {
   created_at: string;
 }
 
-export interface TrendingThreat {
-  id: string;
-  title: string;
-  threat_actor: string;
-  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM';
-  cves: string[];
-  sectors: string[];
-  region: string;
-  source: string;
-  timestamp: string;
-  trend: string;
-  summary: string;
-  sample_indicator: {
-    value: string;
-    type: IndicatorType;
-    label: string;
-  };
-  mitre_techniques: Array<{
-    id: string;
-    name: string;
-  }>;
-}
-
 export interface HistoryItemDTO {
   id: string;
   indicator: string;

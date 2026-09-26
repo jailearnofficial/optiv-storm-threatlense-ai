@@ -24,7 +24,6 @@ import { ThreatGraphPanel } from './components/ThreatGraphPanel.js';
 import { NetworkEnrichmentPanel } from './components/NetworkEnrichmentPanel.js';
 import { DetectionRulesPanel } from './components/DetectionRulesPanel.js';
 import { InvestigationHistoryFeed } from './components/InvestigationHistoryFeed.js';
-import { TrendingThreatIntel } from './components/TrendingThreatIntel.js';
 import { LoginGate } from './components/LoginGate.js';
 import { AuthProvider, useAuth } from './context/AuthContext.js';
 import {
@@ -118,14 +117,9 @@ function Dashboard() {
     submitMode = false,
     file?: File,
     customAnalystName?: string,
-    forceRefresh = false,
-    directIndicator?: string,
-    directType?: IndicatorType | 'auto'
+    forceRefresh = false
   ) => {
     const activeAnalyst = (customAnalystName !== undefined ? customAnalystName : analystName).trim();
-    const targetIndicator = (directIndicator !== undefined ? directIndicator : indicator).trim();
-    const targetType = (directType !== undefined ? directType : selectedType);
-
     setLookupLoading(true);
     setErrorMessage(null);
     setAnalysis(null);
@@ -173,8 +167,8 @@ function Dashboard() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            indicator: targetIndicator,
-            type: targetType === 'auto' ? undefined : targetType,
+            indicator: indicator.trim(),
+            type: selectedType === 'auto' ? undefined : selectedType,
             submit: submitMode,
             analyst_name: activeAnalyst || undefined,
             force_refresh: forceRefresh,
@@ -264,16 +258,13 @@ function Dashboard() {
   };
 
   // Pivot indicator investigation
-  const handlePivotIndicator = (newIndicator: string, newType: IndicatorType | 'auto' = 'auto') => {
+  const handlePivotIndicator = (newIndicator: string, newType: IndicatorType | 'auto') => {
     setIndicator(newIndicator);
     setSelectedType(newType);
     setAnalysis(null);
     setErrorMessage(null);
 
-    // Scroll smoothly to top search console
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-
-    handleLookup(false, undefined, analystName, false, newIndicator, newType);
+    handleLookup(false, undefined, analystName);
   };
 
   // Select from history drawer
@@ -398,14 +389,6 @@ function Dashboard() {
               Active Investigation: <span className="text-cyan-300 font-semibold">{evidence.id}</span>
             </span>
           </div>
-        )}
-
-        {/* Trending Threat Intelligence (Top 5 Emerging Threats Globally) */}
-        {!evidence && !lookupLoading && (
-          <TrendingThreatIntel
-            onSelectIndicator={handlePivotIndicator}
-            isLoading={lookupLoading}
-          />
         )}
 
         {/* Live 24-Hour Investigation History & Audit Trail (Visible to all users on login) */}

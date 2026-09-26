@@ -12,7 +12,6 @@ import { orchestrator } from './orchestrator.js';
 import { runGeminiTriage } from './ai/gemini.js';
 import { db } from './db.js';
 import { generateHtmlReport, generateIOCsCsv, generateSTIXBundle } from './report/generator.js';
-import { TOP_EMERGING_THREATS } from './providers/mockFeeds.js';
 
 export function createApp() {
   const app = express();
@@ -61,23 +60,6 @@ export function createApp() {
       status: 'online',
       timestamp: new Date().toISOString(),
       providers: health
-    });
-  });
-
-  // 1b. Trending Threat Intel & Emerging Global Threats
-  app.get('/api/trending-threats', (req: Request, res: Response) => {
-    res.json({
-      status: 'online',
-      threat_condition: {
-        level: 'ELEVATED',
-        defcon: 'DEFCON-3',
-        advisory: 'ACTIVE EDGE EXPLOITATION & CLOUD TOKEN HARVESTING IN THE WILD',
-        last_updated: new Date().toISOString(),
-        active_global_campaigns: 38,
-        feed_sources: ['CISA KEV', 'Microsoft Threat Intel', 'Europol EC3', 'AlienVault OTX', 'URLhaus']
-      },
-      count: TOP_EMERGING_THREATS.length,
-      threats: TOP_EMERGING_THREATS
     });
   });
 
