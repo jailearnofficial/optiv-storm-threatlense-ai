@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { authenticatedFetch } from '../lib/apiClient.js';
 import {
   X,
   History,
@@ -94,7 +95,7 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 6000);
-        const res = await fetch('/api/history?limit=50', { signal: controller.signal });
+        const res = await authenticatedFetch('/api/history?limit=50', { signal: controller.signal });
         clearTimeout(timeoutId);
 
         if (res.ok) {

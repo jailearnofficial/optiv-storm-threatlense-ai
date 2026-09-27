@@ -28,6 +28,7 @@ import { InvestigationHistoryFeed } from './components/InvestigationHistoryFeed.
 import { CyberWarfareHUD } from './components/cyber/CyberWarfareHUD.js';
 import { LoginGate } from './components/LoginGate.js';
 import { AuthProvider, useAuth } from './context/AuthContext.js';
+import { authenticatedFetch } from './lib/apiClient.js';
 import {
   EvidenceObject,
   ProviderResult,
@@ -89,12 +90,13 @@ function Dashboard() {
   const [historyLoading, setHistoryLoading] = useState<boolean>(false);
 
   const loadHistory = async (retries = 2) => {
+    if (!user) return;
     setHistoryLoading(true);
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 6000);
-        const res = await fetch('/api/history?limit=50', { signal: controller.signal });
+        const res = await authenticatedFetch('/api/history?limit=50', { signal: controller.signal });
         clearTimeout(timeoutId);
 
         if (res.ok) {
@@ -119,13 +121,14 @@ function Dashboard() {
   };
 
   useEffect(() => {
+    if (!user) return;
     loadHistory();
     // Auto-sync history every 15s to keep all users in sync
     const interval = setInterval(() => {
       loadHistory(1);
     }, 15000);
     return () => clearInterval(interval);
-  }, []);
+  }, [user]);
 
   // When an analyst logs in or logs out, ensure a completely fresh workspace state:
   // reset indicator, evidence, analysis, active lookup ID, and clear any error messages,
@@ -188,7 +191,7 @@ function Dashboard() {
         if (forceRefresh) {
           formData.append('force_refresh', 'true');
         }
-        const res = await fetch('/api/submit', {
+        const res = await authenticatedFetch('/api/submit', {
           method: 'POST',
           body: formData
         });
@@ -213,7 +216,7 @@ function Dashboard() {
         // Retain existing analysis if present in 24h cache, but DO NOT auto-synthesize
         if (data.lookup_id && data.cached) {
           try {
-            const anlRes = await fetch('/api/analyze', {
+            const anlRes = await authenticatedFetch('/api/analyze', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ lookup_id: data.lookup_id, refresh: false })
@@ -226,7 +229,7 @@ function Dashboard() {
         }
       } else {
         // Regular JSON lookup
-        const res = await fetch('/api/lookup', {
+        const res = await authenticatedFetch('/api/lookup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -272,7 +275,7 @@ function Dashboard() {
         // Retain existing analysis if present in 24h cache, but DO NOT auto-synthesize
         if (data.lookup_id && data.cached) {
           try {
-            const anlRes = await fetch('/api/analyze', {
+            const anlRes = await authenticatedFetch('/api/analyze', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ lookup_id: data.lookup_id, refresh: false })
@@ -309,7 +312,7 @@ function Dashboard() {
     setErrorMessage(null);
     try {
       const activeAnalyst = (customAnalyst !== undefined ? customAnalyst : analystName).trim();
-      const res = await fetch('/api/analyze', {
+      const res = await authenticatedFetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -353,7 +356,7 @@ function Dashboard() {
   // Select from history drawer
   const handleSelectLookupFromHistory = async (lookupId: string) => {
     try {
-      const res = await fetch(`/api/lookup/${lookupId}`);
+      const res = await authenticatedFetch(`/api/lookup/${lookupId}`);
       if (res.ok) {
         const ev: EvidenceObject = await res.json();
         setEvidence(ev);
@@ -362,7 +365,7 @@ function Dashboard() {
         localStorage.setItem('threatlense_active_lookup_id', lookupId);
 
         // Check if there is an existing analysis for this lookup
-        const anlRes = await fetch('/api/analyze', {
+        const anlRes = await authenticatedFetch('/api/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ lookup_id: lookupId, refresh: false })

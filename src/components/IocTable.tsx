@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Download, Copy, Check, ShieldAlert, FileSpreadsheet, Code2 } from 'lucide-react';
 import { IOCItem } from '../types/index.js';
+import { authenticatedFetch } from '../lib/apiClient.js';
 
 interface IocTableProps {
   iocs: IOCItem[];
@@ -10,6 +11,7 @@ interface IocTableProps {
 export const IocTable: React.FC<IocTableProps> = ({ iocs, analysisId }) => {
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const [copiedAll, setCopiedAll] = useState(false);
+  const [downloadingFormat, setDownloadingFormat] = useState<'csv' | 'json' | null>(null);
 
   if (!iocs || iocs.length === 0) {
     return null;
@@ -26,6 +28,29 @@ export const IocTable: React.FC<IocTableProps> = ({ iocs, analysisId }) => {
     navigator.clipboard.writeText(text);
     setCopiedAll(true);
     setTimeout(() => setCopiedAll(false), 1500);
+  };
+
+  const handleDownload = async (format: 'csv' | 'json') => {
+    setDownloadingFormat(format);
+    try {
+      const res = await authenticatedFetch(`/api/iocs/${analysisId}?format=${format}`);
+      if (!res.ok) {
+        throw new Error(`Download failed with status ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = format === 'csv' ? `IOCs_${analysisId}.csv` : `STIX_${analysisId}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to download IOC export:', err);
+    } finally {
+      setDownloadingFormat(null);
+    }
   };
 
   return (
@@ -52,23 +77,23 @@ export const IocTable: React.FC<IocTableProps> = ({ iocs, analysisId }) => {
               <span>{copiedAll ? 'Copied All' : 'Copy All'}</span>
             </button>
 
-            <a
-              href={`/api/iocs/${analysisId}?format=csv`}
-              download
-              className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 border border-slate-700 font-medium flex items-center gap-1.5 transition-colors"
+            <button
+              onClick={() => handleDownload('csv')}
+              disabled={downloadingFormat === 'csv'}
+              className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 border border-slate-700 font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-cyan-400" />
-              <span>CSV</span>
-            </a>
+              <span>{downloadingFormat === 'csv' ? 'Exporting...' : 'CSV'}</span>
+            </button>
 
-            <a
-              href={`/api/iocs/${analysisId}?format=json`}
-              download
-              className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 border border-slate-700 font-medium flex items-center gap-1.5 transition-colors"
+            <button
+              onClick={() => handleDownload('json')}
+              disabled={downloadingFormat === 'json'}
+              className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 border border-slate-700 font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
             >
               <Code2 className="w-3.5 h-3.5 text-violet-400" />
-              <span>STIX 2.1</span>
-            </a>
+              <span>{downloadingFormat === 'json' ? 'Exporting...' : 'STIX 2.1'}</span>
+            </button>
           </div>
         </div>
 

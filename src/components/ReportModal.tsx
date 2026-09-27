@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Printer, Download, ExternalLink, ShieldCheck } from 'lucide-react';
+import { getAuthToken } from '../lib/apiClient.js';
 
 interface ReportModalProps {
   analysisId: string | null;
@@ -8,11 +9,26 @@ interface ReportModalProps {
 }
 
 export const ReportModal: React.FC<ReportModalProps> = ({ analysisId, analystName, onClose }) => {
+  const [token, setToken] = useState<string>('');
+
+  useEffect(() => {
+    let mounted = true;
+    getAuthToken().then((t) => {
+      if (mounted && t) setToken(t);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   if (!analysisId) return null;
 
-  const reportUrl = analystName
-    ? `/api/report/${analysisId}.pdf?analyst_name=${encodeURIComponent(analystName)}`
-    : `/api/report/${analysisId}.pdf`;
+  const queryParams = new URLSearchParams();
+  if (analystName) queryParams.set('analyst_name', analystName);
+  if (token) queryParams.set('token', token);
+  const queryString = queryParams.toString() ? `?${queryParams.toString()}` : '';
+
+  const reportUrl = `/api/report/${analysisId}.pdf${queryString}`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-150">

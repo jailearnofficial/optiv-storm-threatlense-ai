@@ -12,6 +12,7 @@ import { orchestrator } from './orchestrator.js';
 import { runGeminiTriage } from './ai/gemini.js';
 import { db } from './db.js';
 import { generateHtmlReport, generateIOCsCsv, generateSTIXBundle } from './report/generator.js';
+import { requireFirebaseAuth } from './auth.js';
 
 export function createApp() {
   const app = express();
@@ -60,7 +61,7 @@ export function createApp() {
     next();
   });
 
-  // 1. Health Endpoint
+  // 1. Health Endpoint (Public probe)
   app.get('/api/health', (req: Request, res: Response) => {
     const health = getProviderHealth();
     res.json({
@@ -69,6 +70,9 @@ export function createApp() {
       providers: health
     });
   });
+
+  // Strict Security Gate: Require a verified Firebase ID token on every /api/* route
+  app.use('/api', requireFirebaseAuth);
 
   // 2. Recent History Endpoint (Strict 24-Hour Active Retention)
   app.get('/api/history', (req: Request, res: Response) => {
