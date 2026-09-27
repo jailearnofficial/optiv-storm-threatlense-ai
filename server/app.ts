@@ -71,7 +71,7 @@ export function createApp() {
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
     res.setHeader(
       'Content-Security-Policy',
-      "frame-ancestors 'self' https://optiv-storm-threatlense-ai.vercel.app https://*.optiv.com;"
+      "frame-ancestors 'self' https://aistudio.google.com https://optiv-storm-threatlense-ai.vercel.app https://*.optiv.com;"
     );
 
     if (req.method === 'OPTIONS') {
