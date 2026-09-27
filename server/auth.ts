@@ -240,6 +240,19 @@ export async function requireFirebaseAuth(
 
   try {
     const verifiedUser = await verifyFirebaseIdToken(token);
+
+    // Verify authorized corporate domain (@optiv.com or verified @gmail.com)
+    const email = (verifiedUser.email || '').trim().toLowerCase();
+    const isAllowed = email.endsWith('@optiv.com') || email.endsWith('@gmail.com');
+    if (!isAllowed) {
+      return res.status(403).json({
+        error: {
+          code: 'FORBIDDEN_DOMAIN',
+          message: `Access denied for "${email}". Only authorized @optiv.com and verified @gmail.com accounts are permitted.`
+        }
+      });
+    }
+
     req.user = verifiedUser;
     return next();
   } catch (err: any) {
