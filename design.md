@@ -201,11 +201,12 @@ Located at `server/report/generator.ts`:
 | Threat Vector | Mechanism & Defense |
 | :--- | :--- |
 | **API Secret Leaks** | Loaded strictly via `process.env` in `server/config.ts`. No `VITE_` exposed keys. Health checks only return boolean flags. |
+| **Cross-Origin Exposure (CORS)** | Strict whitelist restricting requests to `https://optiv-storm-threatlense-ai.vercel.app`, `https://*.optiv.com`, and localhost. Disallows wildcard `*`. Enforces `Vary: Origin` and `Access-Control-Allow-Credentials: true`. |
 | **SSRF / Cloud Metadata** | Blocks RFC 1918 private subnets, localhost, and `169.254.169.254` AWS/GCP metadata endpoints. |
 | **CSV Formula Injection** | Prepends `'` to cells starting with `=`, `+`, `-`, `@`, `\t`, or `\r`. |
 | **Cross-Site Scripting (XSS)** | Mandatory HTML entity escaping (`escapeHtml()`) across all template literals. |
 | **Reverse Tab-Nabbing** | All outbound hyperlinks enforce `rel="noopener noreferrer"` and `safeUrl()` protocol checks (`http:`/`https:` only). |
-| **Clickjacking** | Custom `Content-Security-Policy: frame-ancestors 'self' https://*.google.com https://*.run.app https://*.googleusercontent.com;` |
+| **Clickjacking** | Custom `Content-Security-Policy: frame-ancestors 'self' https://aistudio.google.com https://optiv-storm-threatlense-ai.vercel.app https://*.optiv.com;` |
 | **MIME Sniffing** | `X-Content-Type-Options: nosniff`. |
 | **Path Traversal** | Alphanumeric validation regex (`/^[a-zA-Z0-9_-]{1,64}$/`) on all URL route parameters. |
 | **Server Fingerprinting** | Disabled `X-Powered-By: Express`. |

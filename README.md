@@ -31,10 +31,22 @@ OPTIV S.T.O.R.M ThreatLense AI aggregates and correlates live threat telemetry a
 ## 🛡️ Security Architecture
 
 - **Zero Client-Side API Keys**: All provider requests and Gemini API calls are securely proxied through backend server routes (`/api/*`).
+- **Strict Origin-Restricted CORS**:
+  - No wildcard origins (`*`).
+  - Cross-Origin Resource Sharing is strictly constrained to authorized domains:
+    - `https://optiv-storm-threatlense-ai.vercel.app` (Official production portal)
+    - `https://*.optiv.com` (Optiv corporate domains)
+    - `http://localhost:*` & `http://127.0.0.1:*` (Local development)
+  - Enforces `Vary: Origin`, `Access-Control-Allow-Credentials: true`, and strict allowed headers (`Content-Type`, `Authorization`, `X-Requested-With`, `Accept`, `X-Firebase-Token`).
+- **Hardened Content Security Policy (CSP)**:
+  - Enforces strict frame embedding restrictions:
+    ```http
+    Content-Security-Policy: frame-ancestors 'self' https://aistudio.google.com https://optiv-storm-threatlense-ai.vercel.app https://*.optiv.com;
+    ```
+- **Clickjacking & Header Hardening**: Enforces `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-XSS-Protection: 1; mode=block`, and strict `Permissions-Policy`.
 - **Defanged by Default**: All indicators (domains, IPs, URLs) are defanged (`hxxp://`, `example[.]com`) across UI views and exports to prevent accidental navigation or clickjacking.
-- **Hardened Security Headers**: Enforces `Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, and clickjacking protections.
 - **Formula Injection Defense (CWE-1236)**: CSV exports automatically neutralize formula characters (`=`, `+`, `-`, `@`).
-- **Strict Input Validation**: Indicator detection and validation prevent SSRF or malformed parameter attacks.
+- **Strict Input Validation & SSRF Guard**: Indicator detection and validation prevent SSRF or malformed parameter attacks against RFC 1918 private subnets and cloud metadata endpoints.
 
 ---
 
