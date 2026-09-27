@@ -1,0 +1,6 @@
+{
+  "name": "SOC Analysis – AI Unified Threat Triage Portal",
+  "description": "Unified SOC threat triage console combining parallel multi-source threat intelligence with Gemini AI analysis, MITRE ATT&CK mapping, and IOC extraction.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

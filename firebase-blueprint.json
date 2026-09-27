@@ -1,0 +1,61 @@
+{
+  "entities": {
+    "user": {
+      "title": "User",
+      "description": "Authenticated SOC Analyst user profile",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase user authentication UID"
+        },
+        "email": {
+          "type": "string",
+          "description": "Analyst corporate email address"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Analyst display name or callsign"
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "Analyst profile avatar URL"
+        },
+        "role": {
+          "type": "string",
+          "description": "Assigned SOC role tier"
+        },
+        "lastLoginAt": {
+          "type": "string",
+          "description": "ISO timestamp of last session logon"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp when analyst profile was established"
+        }
+      },
+      "required": ["uid", "email"]
+    },
+    "connectionTest": {
+      "title": "ConnectionTest",
+      "description": "Firestore connection validation document probe",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "description": "Probe status"
+        }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "user",
+      "description": "Private profile document for each authenticated SOC analyst"
+    },
+    "/test/{testId}": {
+      "schema": "connectionTest",
+      "description": "Ephemeral connection probe document used on client boot"
+    }
+  }
+}
