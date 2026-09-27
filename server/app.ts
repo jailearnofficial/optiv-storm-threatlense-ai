@@ -41,11 +41,33 @@ export function createApp() {
     return typeof id === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(id);
   }
 
-  // Security and CORS headers
+  // Security and Strict CORS configuration
+  // Restrict access to authorized production, optiv, preview, and local development domains; disallow wildcard *
+  const allowedOriginPatterns = [
+    /^https:\/\/([a-z0-9-]+\.)*run\.app$/i,
+    /^https:\/\/([a-z0-9-]+\.)*optiv\.com$/i,
+    /^https:\/\/([a-z0-9-]+\.)*aistudio\.google\.com$/i,
+    /^https:\/\/([a-z0-9-]+\.)*googleusercontent\.com$/i,
+    /^https:\/\/([a-z0-9-]+\.)*vercel\.app$/i,
+    /^http:\/\/localhost(:[0-9]+)?$/i,
+    /^http:\/\/127\.0\.0\.1(:[0-9]+)?$/i
+  ];
+
   app.use((req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    const origin = req.headers.origin;
+
+    if (origin) {
+      const isAllowed = allowedOriginPatterns.some((pattern) => pattern.test(origin));
+      if (isAllowed) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Vary', 'Origin');
+      }
+    }
+
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, X-Firebase-Token');
+    res.setHeader('Access-Control-Max-Age', '86400');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('X-XSS-Protection', '1; mode=block');
