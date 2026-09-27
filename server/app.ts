@@ -42,13 +42,16 @@ export function createApp() {
   }
 
   // Security and Strict CORS configuration
-  // Restrict access to authorized production, optiv, preview, and local development domains; disallow wildcard *
+  // Restrict access exclusively to the official Vercel portal, Optiv domains, internal Cloud Run runtime, and localhost
   const allowedOriginPatterns = [
-    /^https:\/\/([a-z0-9-]+\.)*run\.app$/i,
+    // 1. Official portal on Vercel
+    /^https:\/\/optiv-storm-threatlense-ai\.vercel\.app$/i,
+    // 2. Optiv corporate domains
     /^https:\/\/([a-z0-9-]+\.)*optiv\.com$/i,
-    /^https:\/\/([a-z0-9-]+\.)*aistudio\.google\.com$/i,
+    // 3. Current Cloud Run applet preview/dev runtime
+    /^https:\/\/([a-z0-9-]+\.)*run\.app$/i,
     /^https:\/\/([a-z0-9-]+\.)*googleusercontent\.com$/i,
-    /^https:\/\/([a-z0-9-]+\.)*vercel\.app$/i,
+    // 4. Local development
     /^http:\/\/localhost(:[0-9]+)?$/i,
     /^http:\/\/127\.0\.0\.1(:[0-9]+)?$/i
   ];
