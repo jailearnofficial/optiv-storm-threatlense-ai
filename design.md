@@ -32,7 +32,7 @@ The resulting output is an authoritative triage verdict complete with MITRE ATT&
                       v                               v
 +------------------------------------+   +------------------------------------------------+
 |     MULTI-VENDOR INTEL ENGINES     |   |          GEMINI AI TRIAGE ENGINE               |
-|  * VirusTotal v3 API               |   |  - Model: Gemini 2.5 Flash                     |
+|  * VirusTotal v3 API               |   |  - Model: Gemini 3.8 Flash (`gemini-3.8-flash`) |
 |  * Hybrid Analysis Falcon Sandbox  |   |  - Strict Structured Schema Output             |
 |  * AlienVault OTX Threat Pulses    |   |  - MITRE ATT&CK Matrix Mapping                 |
 |  * AbuseIPDB v2 Reputation         |   |  - Defanged Secondary IOC Extraction           |
@@ -141,7 +141,7 @@ The deterministic rule score evaluates provider evidence before passing to the A
 
 Located at `server/ai/gemini.ts`:
 
-- **Model**: Google Gemini (`gemini-2.5-flash`) via the `@google/genai` SDK.
+- **Model**: Google Gemini (`gemini-3.8-flash` with fallback to `gemini-flash-latest`, `gemini-3.1-flash-lite`) via the `@google/genai` SDK.
 - **Role**: Level 3 Senior SOC Incident Analyst.
 - **Inputs**: Defanged indicator, indicator type, rule score, and consolidated multi-provider evidence payload.
 - **Output Schema**: Strict JSON Schema enforcement guarantees uniform parsing:
@@ -201,7 +201,9 @@ Located at `server/report/generator.ts`:
 | Threat Vector | Mechanism & Defense |
 | :--- | :--- |
 | **API Secret Leaks** | Loaded strictly via `process.env` in `server/config.ts`. No `VITE_` exposed keys. Health checks only return boolean flags. |
+| **Unauthorized API Ingestion** | Mandatory Firebase ID token verification middleware (`requireFirebaseAuth`) on all `/api/*` endpoints (except `/api/health`). Validates RS256 JWT signatures against Google public x509 certs. |
 | **Cross-Origin Exposure (CORS)** | Strict whitelist restricting requests to `https://optiv-storm-threatlense-ai.vercel.app`, `https://*.optiv.com`, and localhost. Disallows wildcard `*`. Enforces `Vary: Origin` and `Access-Control-Allow-Credentials: true`. |
+| **Data Lingering / Stale History** | Strict 24-hour active retention policy on all in-memory and disk lookup entries. Expired entries automatically excluded, with explicit operator trigger via `POST /api/history/purge`. |
 | **SSRF / Cloud Metadata** | Blocks RFC 1918 private subnets, localhost, and `169.254.169.254` AWS/GCP metadata endpoints. |
 | **CSV Formula Injection** | Prepends `'` to cells starting with `=`, `+`, `-`, `@`, `\t`, or `\r`. |
 | **Cross-Site Scripting (XSS)** | Mandatory HTML entity escaping (`escapeHtml()`) across all template literals. |
@@ -279,10 +281,16 @@ Exports defanged IOCs.
 - **Query Params**: `format=csv` (default) or `format=stix`.
 
 #### `GET /api/history`
-Returns chronological lookup investigation history.
+Returns chronological lookup investigation history constrained strictly to the active 24-hour retention window.
+- **Query Params**: `limit` (default: 50, max: 200).
+- **Response**: `{ retention_window_hours: 24, total: number, history: LookupItem[] }`.
+
+#### `POST /api/history/purge`
+Administrative / operator trigger to immediately evict and purge forensic investigation records older than 24 hours from the disk store.
+- **Response**: `{ message: string, purged_count: number }`.
 
 #### `GET /api/health`
-System operational status and provider connectivity health check.
+System operational status and provider connectivity health check (public probe, does not require Firebase Auth token).
 
 ---
 
@@ -291,6 +299,7 @@ System operational status and provider connectivity health check.
 Located at `server/db.ts`:
 
 - **Dual-Storage Engine**: Combines high-speed in-memory Map indexing with durable asynchronous disk persistence in `data/db.json`.
+- **24-Hour Active Retention Window**: All lookups older than 24 hours are automatically filtered and purged on restart and through the `/api/history/purge` endpoint to maintain data freshness and prevent disk bloat.
 - **Atomic Operations**: Writes use atomic serialization to prevent corruption during concurrent lookup operations.
 - **Session Cache Duration**: Indicators are cached with timestamps to prevent redundant external API quota consumption while supporting an analyst-forced `refresh` trigger.
 

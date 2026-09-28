@@ -31,6 +31,9 @@ OPTIV S.T.O.R.M ThreatLense AI aggregates and correlates live threat telemetry a
 ## 🛡️ Security Architecture
 
 - **Zero Client-Side API Keys**: All provider requests and Gemini API calls are securely proxied through backend server routes (`/api/*`).
+- **Firebase Authentication Token Verification**:
+  - All `/api/*` investigation endpoints (except `/api/health`) require a valid Firebase ID token (`Bearer <token>` or `X-Firebase-Token` header) verified using Google's RS256 x509 public certificates.
+  - Prevents unauthorized API usage, scraping, and abuse of backend intelligence feeds.
 - **Strict Origin-Restricted CORS**:
   - No wildcard origins (`*`).
   - Cross-Origin Resource Sharing is strictly constrained to authorized domains:
@@ -44,6 +47,8 @@ OPTIV S.T.O.R.M ThreatLense AI aggregates and correlates live threat telemetry a
     Content-Security-Policy: frame-ancestors 'self' https://aistudio.google.com https://optiv-storm-threatlense-ai.vercel.app https://*.optiv.com;
     ```
 - **Clickjacking & Header Hardening**: Enforces `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-XSS-Protection: 1; mode=block`, and strict `Permissions-Policy`.
+- **Active 24-Hour Forensic Retention**:
+  - Strict 24-hour investigative history window (`/api/history`) with automatic timestamp expiration and manual force-purge (`POST /api/history/purge`).
 - **Defanged by Default**: All indicators (domains, IPs, URLs) are defanged (`hxxp://`, `example[.]com`) across UI views and exports to prevent accidental navigation or clickjacking.
 - **Formula Injection Defense (CWE-1236)**: CSV exports automatically neutralize formula characters (`=`, `+`, `-`, `@`).
 - **Strict Input Validation & SSRF Guard**: Indicator detection and validation prevent SSRF or malformed parameter attacks against RFC 1918 private subnets and cloud metadata endpoints.
