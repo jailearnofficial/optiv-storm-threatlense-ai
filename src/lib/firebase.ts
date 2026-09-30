@@ -89,25 +89,27 @@ export async function testConnection(): Promise<boolean> {
   }
 }
 
-// Sync user profile to Firestore
-export async function syncUserProfile(user: User): Promise<void> {
+// Sync user profile to Firestore with RBAC role
+export async function syncUserProfile(user: User, customRole?: string): Promise<void> {
   const userRef = doc(db, 'users', user.uid);
   try {
     const existing = await getDoc(userRef);
     const now = new Date().toISOString();
+    const assignedRole = customRole || 'Analyst';
     if (!existing.exists()) {
       await setDoc(userRef, {
         uid: user.uid,
         email: user.email || 'unknown@analyst.soc',
         displayName: user.displayName || user.email?.split('@')[0] || 'SOC Analyst',
         photoURL: user.photoURL || '',
-        role: 'Tier-1/2 SOC Analyst',
+        role: assignedRole,
         createdAt: now,
         lastLoginAt: now
       });
     } else {
       await setDoc(userRef, {
         ...existing.data(),
+        role: customRole || existing.data()?.role || 'Analyst',
         lastLoginAt: now,
         displayName: user.displayName || existing.data()?.displayName || 'SOC Analyst',
         photoURL: user.photoURL || existing.data()?.photoURL || ''

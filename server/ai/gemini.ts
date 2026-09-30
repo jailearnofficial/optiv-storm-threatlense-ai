@@ -73,12 +73,19 @@ export interface AIAnalysisVerdict {
   created_at: string;
 }
 
+let geminiTriageCooldownUntil = 0;
+
 export async function runGeminiTriage(evidence: EvidenceObject): Promise<AIAnalysisVerdict> {
   const apiKey = config.geminiApiKey;
 
   if (!apiKey) {
     // Return heuristic deterministic verdict when GEMINI_API_KEY is not provided
     return buildFallbackVerdict(evidence, 'Heuristic-Engine-v1');
+  }
+
+  // If rate limit / quota exhaustion cooldown is active, use deterministic engine without failing calls
+  if (Date.now() < geminiTriageCooldownUntil) {
+    return buildFallbackVerdict(evidence, 'Deterministic SOC Intelligence Engine (Rate quota cooldown active)');
   }
 
   const ai = new GoogleGenAI({
@@ -149,6 +156,19 @@ export async function runGeminiTriage(evidence: EvidenceObject): Promise<AIAnaly
             nodes: p.vt_graph.nodes.slice(0, 12),
             links: p.vt_graph.links.slice(0, 12)
           }
+        : undefined,
+      in_house_sandbox: p.name === 'in_house_sandbox' && p.raw
+        ? {
+            guest_os: p.raw.guest_os_label,
+            isolation: p.raw.environment_isolation,
+            threat_score: p.raw.threat_score,
+            entropy: p.raw.sample_info?.entropy,
+            process_injections: p.raw.behavioral_summary?.process_injections_detected,
+            process_tree: p.raw.process_tree,
+            beacons: p.raw.network_beacons,
+            artifacts: p.raw.filesystem_artifacts,
+            mitre_attack: p.raw.mitre_attack
+          }
         : undefined
     })),
     mitre_hints: evidence.mitre_hints,
@@ -168,8 +188,9 @@ Special instructions for triage & reporting:
 1. Under technical_summary and executive_summary, and in category_breakdown (specifically under 'hybrid_analysis' and 'alienvault_otx'):
    - Hybrid Analysis Falcon Sandbox: Detail the Threat Score (0-100), sandbox verdict, multi-AV detection percentage & ratio (e.g. 92%, 48/52), identified malware family, sandbox execution environment, and sandbox-observed MITRE ATT&CK techniques with behavioral execution evidence.
    - AlienVault OTX: Detail the total community threat pulses count, attributed adversary/threat actor (e.g. Lazarus Group / APT38), prominent pulse campaign names, targeted countries/sectors, community tags, and external threat advisory references.
+   - In-House Air-Gapped Sandbox: If present, detail the Guest VM OS profile, Threat Score (0-100), process injection indicators (PID hollowing/VirtualAllocEx), dynamic network beacons (IPs, C2 ports), created mutexes, and dropped artifacts.
    - VirusTotal: Detail AV detection ratio, top security vendor engine signatures, and connected VT Graph relationships.
-2. Incorporate Hybrid Analysis and AlienVault OTX MITRE ATT&CK techniques (e.g. T1486, T1490, T1059, T1071, T1210) into the mitre_attack mapping with high fidelity.
+2. Incorporate Hybrid Analysis, In-House Sandbox, and AlienVault OTX MITRE ATT&CK techniques (e.g. T1486, T1490, T1059, T1055, T1071, T1210) into the mitre_attack mapping with high fidelity.
 3. recommended_actions must provide detailed, immediate Incident Response actions:
    - Perimeter & Egress: Block indicator on firewalls, web proxies, and external dynamic lists (EDL).
    - EDR & Endpoint: Hash ban in CrowdStrike/Defender, memory sweep for injected code/mutexes, process termination.
@@ -348,8 +369,12 @@ ${JSON.stringify(trimmedEvidence, null, 2)}
     }
   }
 
-  console.error('All Gemini model candidates failed, falling back to deterministic triage:', lastError);
-  return buildFallbackVerdict(evidence, `Deterministic SOC Engine (AI busy: ${lastError?.message?.substring(0, 80) || '503'})`);
+  const errStr = String(lastError?.message || '');
+  if (errStr.includes('429') || errStr.includes('RESOURCE_EXHAUSTED') || errStr.includes('quota')) {
+    geminiTriageCooldownUntil = Date.now() + 60 * 1000;
+  }
+
+  return buildFallbackVerdict(evidence, `Deterministic SOC Engine (AI busy: ${errStr.substring(0, 50) || 'Standby'})`);
 }
 
 

@@ -12,30 +12,41 @@ import {
   ShieldCheck,
   Sliders,
   Globe,
-  Crosshair
+  Crosshair,
+  Sun,
+  Moon,
+  Bot
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
+import { useTheme } from '../context/ThemeContext.js';
 
 interface HeaderProps {
   onOpenHistory: () => void;
   onOpenSiemSoar?: () => void;
+  onOpenApiKeyModal?: () => void;
   onResetToFreshWorkspace?: () => void;
   activeSiemCount?: number;
   providerHealth: Record<string, { configured: boolean; status: string }>;
   onToggleCyberWarfare?: () => void;
   isCyberWarfareActive?: boolean;
+  isAgenticMode?: boolean;
+  onToggleAgenticMode?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   onOpenHistory,
   onOpenSiemSoar,
+  onOpenApiKeyModal,
   onResetToFreshWorkspace,
   activeSiemCount = 0,
   providerHealth,
   onToggleCyberWarfare,
-  isCyberWarfareActive = false
+  isCyberWarfareActive = false,
+  isAgenticMode = false,
+  onToggleAgenticMode
 }) => {
-  const { user, signOut } = useAuth();
+  const { user, isAdmin, userRole, signOut } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
@@ -133,7 +144,32 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Right actions: History, SIEM/SOAR Button & Interactive Profile Menu */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
+          {/* Autonomous Agentic AI Mode Switcher Toggle Button */}
+          {onToggleAgenticMode && (
+            <button
+              onClick={onToggleAgenticMode}
+              className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm group ${
+                isAgenticMode
+                  ? 'bg-gradient-to-r from-violet-950 via-slate-900 to-cyan-950 border-violet-400 text-violet-200 shadow-[0_0_15px_rgba(167,139,250,0.3)]'
+                  : 'bg-slate-900/90 hover:bg-slate-850 border-slate-700/80 text-slate-300 hover:text-violet-300 hover:border-violet-500/50'
+              }`}
+              title="Toggle Autonomous Agentic AI Investigation Mode"
+            >
+              <Bot className={`w-3.5 h-3.5 ${isAgenticMode ? 'text-violet-400 animate-pulse' : 'text-slate-400 group-hover:text-violet-400'}`} />
+              <span className="hidden sm:inline">Agentic AI</span>
+              <span
+                className={`text-[9px] font-mono px-1.5 py-0.2 rounded border font-bold ${
+                  isAgenticMode
+                    ? 'bg-violet-500/20 text-violet-300 border-violet-500/40'
+                    : 'bg-slate-800 text-slate-400 border-slate-700'
+                }`}
+              >
+                {isAgenticMode ? 'ON' : 'OFF'}
+              </span>
+            </button>
+          )}
+
           {/* Cyber Warfare Visuals HUD Button */}
           {onToggleCyberWarfare && (
             <button
@@ -156,8 +192,8 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
-          {/* SIEM & SOAR Integration Quick Button */}
-          {onOpenSiemSoar && (
+          {/* SIEM & SOAR Integration Quick Button (Restricted to Admin Only) */}
+          {isAdmin && onOpenSiemSoar && (
             <button
               onClick={onOpenSiemSoar}
               className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer shadow-sm group ${
@@ -165,7 +201,7 @@ export const Header: React.FC<HeaderProps> = ({
                   ? 'bg-gradient-to-r from-cyan-950/80 to-slate-900 hover:from-cyan-900/90 hover:to-slate-800 border-cyan-500/40 hover:border-cyan-400 text-cyan-200 shadow-[0_0_12px_rgba(34,211,238,0.15)]'
                   : 'bg-slate-900/90 hover:bg-slate-800 border-slate-700/80 hover:border-slate-600 text-slate-300'
               }`}
-              title="Configure Enterprise SIEM & SOAR Connectors"
+              title="Configure Enterprise SIEM & SOAR Connectors (Admin Access)"
             >
               <Cable className="w-3.5 h-3.5 text-cyan-400 group-hover:rotate-12 transition-transform" />
               <span className="font-semibold">SIEM / SOAR</span>
@@ -176,7 +212,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               ) : (
                 <span className="text-[10px] font-mono text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700 ml-0.5">
-                  Configure
+                  Admin
                 </span>
               )}
             </button>
@@ -213,8 +249,8 @@ export const Header: React.FC<HeaderProps> = ({
                   <span className="text-xs font-semibold text-slate-200 truncate max-w-[120px] font-mono leading-none group-hover:text-cyan-300">
                     {analystDisplayName}
                   </span>
-                  <span className="text-[9px] text-cyan-400 font-mono mt-0.5 leading-none">
-                    SOC Analyst
+                  <span className={`text-[9px] font-mono mt-0.5 leading-none ${isAdmin ? 'text-amber-400 font-bold' : 'text-cyan-400'}`}>
+                    {isAdmin ? 'SOC Admin' : 'SOC Analyst'}
                   </span>
                 </div>
                 <ChevronDown
@@ -226,43 +262,121 @@ export const Header: React.FC<HeaderProps> = ({
 
               {/* Profile Dropdown Menu */}
               {profileDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-72 rounded-xl bg-[#0D131F] border border-slate-700/90 shadow-[0_10px_30px_rgba(0,0,0,0.7)] text-slate-200 py-2 z-50 animate-in fade-in duration-100">
+                <div className="absolute right-0 mt-2 w-76 rounded-xl bg-white dark:bg-[#0D131F] border border-slate-200 dark:border-slate-700/90 shadow-[0_10px_30px_rgba(0,0,0,0.3)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.7)] text-slate-800 dark:text-slate-200 py-2 z-50 animate-in fade-in duration-100">
                   {/* Analyst Details Ribbon */}
-                  <div className="px-4 py-2.5 border-b border-slate-800 bg-slate-950/40">
+                  <div className="px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40">
                     <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_#10B981]" />
-                      <span className="text-xs font-bold text-slate-100 truncate">
+                      <div className={`w-2 h-2 rounded-full ${isAdmin ? 'bg-amber-400 shadow-[0_0_6px_#F59E0B]' : 'bg-emerald-400 shadow-[0_0_6px_#10B981]'}`} />
+                      <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
                         {user.displayName || analystDisplayName}
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-400 font-mono truncate mt-0.5">
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate mt-0.5">
                       {user.email}
                     </p>
-                    <div className="mt-1.5 flex items-center gap-1.5">
-                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
-                        Tier-2 SOC Lead
+                    <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                      <span className={`text-[9px] font-mono px-2 py-0.5 rounded font-bold border ${
+                        isAdmin
+                          ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/40 shadow-sm'
+                          : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'
+                      }`}>
+                        {isAdmin ? 'SOC Admin (Full Access)' : 'SOC Analyst'}
                       </span>
-                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
-                        Firebase Verified
+                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                        {user.providerData?.some(p => p.providerId === 'google.com') ? 'Google Auth' : 'Password Auth'}
                       </span>
+                    </div>
+                  </div>
+
+                  {/* Appearance & Theme Selector (Moved under user profile) */}
+                  <div className="px-3.5 py-2.5 border-b border-slate-200 dark:border-slate-800/80 bg-slate-50/70 dark:bg-slate-950/30">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        Appearance & Theme
+                      </span>
+                      <span className="text-[10px] font-mono text-cyan-600 dark:text-cyan-400 font-semibold">
+                        {theme === 'light' ? 'Light Active' : 'Dark Active'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (theme !== 'light') toggleTheme();
+                        }}
+                        className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          theme === 'light'
+                            ? 'bg-amber-500/20 border-amber-500/60 text-amber-800 dark:text-amber-300 shadow-sm'
+                            : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        <Sun className="w-3.5 h-3.5 text-amber-500" />
+                        <span>Light Mode</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (theme !== 'dark') toggleTheme();
+                        }}
+                        className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          theme === 'dark'
+                            ? 'bg-cyan-500/25 border-cyan-500/60 text-cyan-200 shadow-sm'
+                            : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        <Moon className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Dark Mode</span>
+                      </button>
                     </div>
                   </div>
 
                   {/* Integration Menu Items */}
                   <div className="p-1 space-y-0.5 text-xs font-medium">
+                    {/* Autonomous Agentic AI SOC Mode */}
+                    {onToggleAgenticMode && (
+                      <button
+                        onClick={() => {
+                          setProfileDropdownOpen(false);
+                          onToggleAgenticMode();
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-violet-500/10 hover:text-violet-600 dark:hover:text-violet-300 flex items-center justify-between transition-colors cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Bot className="w-4 h-4 text-violet-400 group-hover:scale-110 transition-transform" />
+                          <div>
+                            <span className="block font-semibold">Autonomous Agentic AI SOC</span>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">
+                              Multi-Agent ReAct Hunter & Triage Swarm
+                            </span>
+                          </div>
+                        </div>
+                        <span
+                          className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
+                            isAgenticMode
+                              ? 'bg-violet-950 text-violet-300 border-violet-800'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                          }`}
+                        >
+                          {isAgenticMode ? 'Active' : 'Switch'}
+                        </span>
+                      </button>
+                    )}
+
+                    {/* Cyber Warfare HUD */}
                     {onToggleCyberWarfare && (
                       <button
                         onClick={() => {
                           setProfileDropdownOpen(false);
                           onToggleCyberWarfare();
                         }}
-                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-cyan-950/60 hover:text-cyan-300 flex items-center justify-between transition-colors cursor-pointer group"
+                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-cyan-500/10 hover:text-cyan-600 dark:hover:text-cyan-300 flex items-center justify-between transition-colors cursor-pointer group"
                       >
                         <div className="flex items-center gap-2.5">
-                          <Globe className="w-4 h-4 text-cyan-400 group-hover:rotate-45 transition-transform" />
+                          <Globe className="w-4 h-4 text-cyan-500 group-hover:rotate-45 transition-transform" />
                           <div>
                             <span className="block font-semibold">Cyber Warfare Visuals HUD</span>
-                            <span className="text-[10px] text-slate-400 font-normal">
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">
                               Attack Globe, 360° Radar & Kill-Chain
                             </span>
                           </div>
@@ -271,7 +385,7 @@ export const Header: React.FC<HeaderProps> = ({
                           className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
                             isCyberWarfareActive
                               ? 'bg-cyan-950 text-cyan-300 border-cyan-800'
-                              : 'bg-slate-800 text-slate-400 border-slate-700'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
                           }`}
                         >
                           {isCyberWarfareActive ? 'Active' : 'Open'}
@@ -279,64 +393,82 @@ export const Header: React.FC<HeaderProps> = ({
                       </button>
                     )}
 
-                    {onOpenSiemSoar && (
+                    {/* SIEM & SOAR Connectors (RESTRICTED TO ADMIN ONLY) */}
+                    {isAdmin && onOpenSiemSoar && (
                       <button
                         onClick={() => {
                           setProfileDropdownOpen(false);
                           onOpenSiemSoar();
                         }}
-                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-cyan-950/60 hover:text-cyan-300 flex items-center justify-between transition-colors cursor-pointer group"
+                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-cyan-500/10 hover:text-cyan-600 dark:hover:text-cyan-300 flex items-center justify-between transition-colors cursor-pointer group"
                       >
                         <div className="flex items-center gap-2.5">
-                          <Cable className="w-4 h-4 text-cyan-400" />
+                          <Cable className="w-4 h-4 text-cyan-500" />
                           <div>
-                            <span className="block font-semibold">SIEM & SOAR Connectors</span>
-                            <span className="text-[10px] text-slate-400 font-normal">
+                            <div className="flex items-center gap-1.5">
+                              <span className="block font-semibold">SIEM & SOAR Connectors</span>
+                              <span className="text-[9px] font-mono px-1 rounded bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                                Admin
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">
                               Sentinel, Splunk, XSOAR, Chronicle
                             </span>
                           </div>
                         </div>
                         {activeSiemCount > 0 ? (
-                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30">
                             {activeSiemCount} Active
                           </span>
                         ) : (
-                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
                             Configure
                           </span>
                         )}
                       </button>
                     )}
 
-                    {onOpenSiemSoar && (
+                    {/* Create & Manage API Keys (RESTRICTED TO ADMIN ONLY) */}
+                    {isAdmin && onOpenApiKeyModal && (
                       <button
                         onClick={() => {
                           setProfileDropdownOpen(false);
-                          onOpenSiemSoar();
+                          onOpenApiKeyModal();
                         }}
-                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800/80 hover:text-slate-100 flex items-center gap-2.5 transition-colors cursor-pointer"
+                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-violet-500/10 hover:text-violet-600 dark:hover:text-violet-300 flex items-center justify-between transition-colors cursor-pointer group"
                       >
-                        <Key className="w-4 h-4 text-violet-400" />
-                        <div>
-                          <span className="block font-semibold">SOAR Webhook & API Keys</span>
-                          <span className="text-[10px] text-slate-400 font-normal">
-                            Headless Ingestion Endpoint
-                          </span>
+                        <div className="flex items-center gap-2.5">
+                          <Key className="w-4 h-4 text-violet-500" />
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="block font-semibold">Create & Manage API Keys</span>
+                              <span className="text-[9px] font-mono px-1 rounded bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/30 font-semibold">
+                                Admin
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">
+                              Generate Ingest Tokens & Webhooks
+                            </span>
+                          </div>
                         </div>
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-600 dark:text-violet-300 border border-violet-500/30">
+                          Create
+                        </span>
                       </button>
                     )}
 
+                    {/* Investigation History (All Analysts) */}
                     <button
                       onClick={() => {
                         setProfileDropdownOpen(false);
                         onOpenHistory();
                       }}
-                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800/80 hover:text-slate-100 flex items-center gap-2.5 transition-colors cursor-pointer"
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 flex items-center gap-2.5 transition-colors cursor-pointer"
                     >
-                      <History className="w-4 h-4 text-cyan-400" />
+                      <History className="w-4 h-4 text-cyan-500" />
                       <div>
                         <span className="block font-semibold">24-Hour Investigation Feed</span>
-                        <span className="text-[10px] text-slate-400 font-normal">
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">
                           Audit Trail & Case Cache
                         </span>
                       </div>
@@ -344,15 +476,15 @@ export const Header: React.FC<HeaderProps> = ({
                   </div>
 
                   {/* Sign Out Action */}
-                  <div className="p-1 pt-1.5 border-t border-slate-800/80 mt-1">
+                  <div className="p-1 pt-1.5 border-t border-slate-200 dark:border-slate-800/80 mt-1">
                     <button
                       onClick={() => {
                         setProfileDropdownOpen(false);
                         signOut();
                       }}
-                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-rose-950/60 hover:text-rose-300 text-slate-300 flex items-center gap-2.5 transition-colors cursor-pointer text-xs"
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center gap-2.5 transition-colors cursor-pointer text-xs font-semibold"
                     >
-                      <LogOut className="w-4 h-4 text-rose-400" />
+                      <LogOut className="w-4 h-4 text-rose-500" />
                       <span>Sign Out of Console</span>
                     </button>
                   </div>

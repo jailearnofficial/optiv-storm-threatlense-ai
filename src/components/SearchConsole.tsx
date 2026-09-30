@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Search,
   UploadCloud,
@@ -13,9 +14,13 @@ import {
   User,
   UserCheck,
   ShieldAlert,
-  X
+  X,
+  Globe,
+  Server,
+  Terminal,
+  Cpu
 } from 'lucide-react';
-import { IndicatorType } from '../types/index.js';
+import { IndicatorType, DetonationTarget, SandboxGuestOS } from '../types/index.js';
 import { useAuth } from '../context/AuthContext.js';
 
 interface SearchConsoleProps {
@@ -23,10 +28,20 @@ interface SearchConsoleProps {
   setIndicator: (val: string) => void;
   selectedType: string;
   setSelectedType: (type: string) => void;
-  onLookup: (submitMode: boolean, file?: File) => void;
+  onLookup: (
+    submitMode: boolean,
+    file?: File,
+    customAnalystName?: string,
+    forceRefresh?: boolean,
+    detonationOptions?: {
+      detonationTarget: 'threat_intel' | 'in_house_sandbox' | 'dual_track';
+      guestOS: 'win10_x64' | 'win11_x64' | 'ubuntu_x64';
+    }
+  ) => void;
   loading: boolean;
   analystName: string;
   setAnalystName: (name: string) => void;
+  onFileModalOpenChange?: (open: boolean) => void;
 }
 
 export const SearchConsole: React.FC<SearchConsoleProps> = ({
@@ -37,10 +52,10 @@ export const SearchConsole: React.FC<SearchConsoleProps> = ({
   onLookup,
   loading,
   analystName,
-  setAnalystName
+  setAnalystName,
+  onFileModalOpenChange
 }) => {
   const { user } = useAuth();
-  const [submitToggle, setSubmitToggle] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [detectedType, setDetectedType] = useState<IndicatorType>('domain');
   const [defangedPreview, setDefangedPreview] = useState<string>('');
@@ -51,8 +66,27 @@ export const SearchConsole: React.FC<SearchConsoleProps> = ({
   const [showAnalystModal, setShowAnalystModal] = useState(false);
   const [modalInputName, setModalInputName] = useState('');
   const [modalError, setModalError] = useState('');
-  const [pendingAction, setPendingAction] = useState<{ submitMode: boolean; file?: File } | null>(null);
+  const [pendingAction, setPendingAction] = useState<{
+    submitMode: boolean;
+    file?: File;
+    detonationOptions?: {
+      detonationTarget: DetonationTarget;
+      guestOS: SandboxGuestOS;
+    };
+  } | null>(null);
   const modalInputRef = useRef<HTMLInputElement>(null);
+
+  // In-House Sandbox Detonation Target Selection Modal
+  const [showDetonationModal, setShowDetonationModal] = useState(false);
+  const [detonationTarget, setDetonationTarget] = useState<DetonationTarget>('threat_intel');
+  const [guestOS, setGuestOS] = useState<SandboxGuestOS>('win10_x64');
+  const [fileToDetonate, setFileToDetonate] = useState<File | null>(null);
+  const modalFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Notify parent App when file modal opens/closes so background feeds and 24h history can be hidden
+  useEffect(() => {
+    onFileModalOpenChange?.(showDetonationModal);
+  }, [showDetonationModal, onFileModalOpenChange]);
 
   // Auto detect type & defang locally for real-time chip
   useEffect(() => {
@@ -112,27 +146,41 @@ export const SearchConsole: React.FC<SearchConsoleProps> = ({
     setSelectedFile(file);
     setIndicator(`[File] ${file.name}`);
     setSelectedType('hash');
-    setSubmitToggle(true);
+    setFileToDetonate(file);
+    setShowDetonationModal(true);
+  };
 
-    // If analyst name is missing, prompt modal to collect attribution and immediately dispatch
-    if (!analystName.trim()) {
-      setPendingAction({ submitMode: true, file });
-      setShowAnalystModal(true);
-    } else {
-      // Analyst name present: immediately parse and send to VirusTotal, Hybrid Analysis, AlienVault OTX
-      onLookup(true, file);
+  const handleOpenBrowseModal = () => {
+    setShowDetonationModal(true);
+  };
+
+  const handleDetonationConfirm = () => {
+    const file = fileToDetonate || selectedFile;
+    if (!file) {
+      modalFileInputRef.current?.click();
+      return;
     }
+
+    const targetAnalyst = (analystName.trim() || modalInputName.trim() || 'SOC Analyst (Active)');
+    if (!analystName.trim()) {
+      setAnalystName(targetAnalyst);
+    }
+
+    setShowDetonationModal(false);
+
+    const detonationOptions = {
+      detonationTarget,
+      guestOS
+    };
+
+    onLookup(true, file, targetAnalyst, false, detonationOptions);
   };
 
   const initiateSearchOrSubmission = (submitMode: boolean, file?: File) => {
     const targetFile = file || selectedFile;
     if (targetFile) {
-      if (!analystName.trim()) {
-        setPendingAction({ submitMode: true, file: targetFile });
-        setShowAnalystModal(true);
-        return;
-      }
-      onLookup(true, targetFile);
+      setFileToDetonate(targetFile);
+      setShowDetonationModal(true);
       return;
     }
 
@@ -146,7 +194,7 @@ export const SearchConsole: React.FC<SearchConsoleProps> = ({
     if (selectedFile) {
       initiateSearchOrSubmission(true, selectedFile);
     } else if (indicator.trim()) {
-      initiateSearchOrSubmission(submitToggle);
+      initiateSearchOrSubmission(false);
     }
   };
 
@@ -168,9 +216,9 @@ export const SearchConsole: React.FC<SearchConsoleProps> = ({
     setPendingAction(null);
 
     if (action.file) {
-      onLookup(true, action.file);
+      onLookup(true, action.file, clean || undefined, false, action.detonationOptions);
     } else if (indicator.trim()) {
-      onLookup(action.submitMode);
+      onLookup(action.submitMode, undefined, clean || undefined);
     }
   };
 
@@ -362,6 +410,17 @@ export const SearchConsole: React.FC<SearchConsoleProps> = ({
               </div>
             </div>
 
+            {/* Browse File Button */}
+            <button
+              type="button"
+              onClick={handleOpenBrowseModal}
+              className="px-4 py-2.5 rounded-lg bg-slate-800/90 hover:bg-slate-700/90 text-cyan-300 hover:text-cyan-200 border border-slate-700 hover:border-cyan-500/50 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer shrink-0"
+              title="Browse and detonate binary, script, or document sample"
+            >
+              <UploadCloud className="w-4 h-4 text-cyan-400" />
+              <span>Browse File</span>
+            </button>
+
             {/* Lookup / Investigate Button */}
             <button
               type="submit"
@@ -430,103 +489,280 @@ export const SearchConsole: React.FC<SearchConsoleProps> = ({
             </div>
           )}
         </div>
+      </form>
 
-        {/* Submission Mode Toggle & Warning */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-1 text-xs text-slate-400">
-          <label className="flex items-center gap-2.5 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={submitToggle}
-              onChange={(e) => setSubmitToggle(e.target.checked)}
-              className="sr-only"
-            />
-            <div
-              className={`w-9 h-5 rounded-full p-0.5 transition-colors ${
-                submitToggle ? 'bg-amber-500' : 'bg-slate-700'
-              }`}
-            >
-              <div
-                className={`w-4 h-4 rounded-full bg-white transition-transform ${
-                  submitToggle ? 'translate-x-4' : 'translate-x-0'
-                }`}
-              />
+      {/* Detonation Target & In-House Sandbox Selection Modal (Rendered at Root Portal to ensure clean view without interference) */}
+      {showDetonationModal && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-[#070B14]/95 backdrop-blur-2xl overflow-y-auto animate-in fade-in duration-150">
+          <div className="relative w-full max-w-xl rounded-2xl bg-slate-900 border border-cyan-500/50 shadow-[0_0_80px_rgba(0,0,0,0.9)] p-6 overflow-hidden my-auto">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
+                  <Cpu className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                    <span>Sample Detonation Routing Target</span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Isolated Air-Gapped Sandbox & Threat Intelligence Pipeline
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDetonationModal(false);
+                  setFileToDetonate(null);
+                }}
+                className="text-slate-400 hover:text-slate-200 p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <span className={submitToggle ? 'text-amber-300 font-medium' : 'text-slate-400'}>
-              Submit for Active Analysis / File Sandbox (Upload up to 32MB)
-            </span>
-          </label>
 
-          <span className="text-[11px] text-slate-500 font-mono">
-            Default: Passive Query (No data leaked to public feeds)
-          </span>
-        </div>
-
-        {/* Active File Dropzone if Submit Toggle Enabled */}
-        {submitToggle && (
-          <div className="animate-in fade-in slide-in-from-top-2 duration-200">
-            {/* Warning Banner */}
-            <div className="p-3 mb-2.5 rounded-lg bg-amber-950/40 border border-amber-600/40 text-amber-200 text-xs flex items-start gap-2.5">
-              <AlertOctagon className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+            {/* Public Intelligence Disclosure Warning Disclaimer */}
+            <div className="my-3.5 p-3.5 rounded-xl bg-amber-950/40 border border-amber-600/50 text-amber-200 text-xs flex items-start gap-3 shadow-[0_0_15px_rgba(245,158,11,0.1)]">
+              <AlertOctagon className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
               <div>
-                <p className="font-semibold text-amber-300">Public Intelligence Disclosure Warning</p>
-                <p className="text-[11px] text-amber-200/80 leading-relaxed">
-                  Submitting active files or URLs forwards them to third-party sandbox engines (VirusTotal, Hybrid Analysis, urlscan.io). Indicators and files may become visible to other security researchers on those platforms. urlscan.io is forced to <code className="text-amber-100 font-mono">unlisted</code>.
+                <p className="font-bold text-amber-300 text-xs tracking-wide uppercase">
+                  Public Intelligence Disclosure Warning
+                </p>
+                <p className="text-[11.5px] text-amber-200/90 leading-relaxed mt-1">
+                  Submitting active files or URLs forwards them to third-party sandbox engines (VirusTotal, Hybrid Analysis, urlscan.io). Indicators and files may become visible to other security researchers on those platforms. urlscan.io is forced to <code className="text-amber-100 font-mono bg-amber-950/80 px-1 py-0.5 rounded border border-amber-700/60">unlisted</code>.
                 </p>
               </div>
             </div>
 
-            {/* Dropzone */}
-            <div
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragOver(true);
+            {/* Hidden Input for Selecting / Changing File */}
+            <input
+              ref={modalFileInputRef}
+              type="file"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files && e.target.files[0]) {
+                  const file = e.target.files[0];
+                  if (file.size > 32 * 1024 * 1024) {
+                    alert('File size exceeds 32 MB limit.');
+                    return;
+                  }
+                  setFileToDetonate(file);
+                  setSelectedFile(file);
+                  setIndicator(`[File] ${file.name}`);
+                  setSelectedType('hash');
+                }
               }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-colors ${
-                dragOver
-                  ? 'border-cyan-400 bg-cyan-950/20'
-                  : 'border-slate-700 hover:border-slate-600 bg-slate-900/40'
-              }`}
-            >
-              {selectedFile ? (
-                <div className="flex items-center justify-center gap-3">
-                  <FileText className="w-8 h-8 text-cyan-400" />
-                  <div className="text-left">
-                    <p className="font-mono text-sm font-semibold text-slate-200">
-                      {selectedFile.name}
-                    </p>
-                    <p className="text-xs text-slate-400 font-mono">
-                      {(selectedFile.size / 1024).toFixed(1)} KB · Ready to compute MD5, SHA-1, SHA-256
-                    </p>
+            />
+
+            {/* Embedded File Selection / Status Box */}
+            <div className="my-4">
+              {fileToDetonate || selectedFile ? (
+                <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-950 border border-cyan-500/40">
+                  <div className="flex items-center gap-3 truncate">
+                    <div className="p-2.5 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 shrink-0">
+                      <FileText className="w-5 h-5" />
+                    </div>
+                    <div className="truncate">
+                      <div className="text-xs font-mono font-bold text-cyan-300 truncate">
+                        {(fileToDetonate || selectedFile)?.name}
+                      </div>
+                      <div className="text-[11px] text-slate-400 font-mono">
+                        {((fileToDetonate || selectedFile)!.size / 1024).toFixed(1)} KB · Ready to Detonate
+                      </div>
+                    </div>
                   </div>
                   <button
                     type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedFile(null);
-                    }}
-                    className="ml-4 text-xs text-rose-400 hover:text-rose-300 underline"
+                    onClick={() => modalFileInputRef.current?.click()}
+                    className="text-xs font-semibold text-cyan-400 hover:text-cyan-300 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer border border-slate-700 shrink-0 ml-3"
                   >
-                    Remove
+                    Change File
                   </button>
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center gap-1.5">
-                  <UploadCloud className="w-7 h-7 text-slate-400 mb-1" />
-                  <p className="text-xs text-slate-300 font-medium">
-                    Drag and drop a suspicious file here, or click to browse
+                <div
+                  onClick={() => modalFileInputRef.current?.click()}
+                  className="border-2 border-dashed border-cyan-500/50 hover:border-cyan-400 bg-cyan-950/20 hover:bg-cyan-950/40 rounded-xl p-5 text-center cursor-pointer transition-all group"
+                >
+                  <UploadCloud className="w-8 h-8 text-cyan-400 mx-auto mb-1.5 group-hover:scale-110 transition-transform" />
+                  <p className="text-xs font-bold text-slate-100">
+                    Click to Select Sample File or Drag & Drop Here
                   </p>
-                  <p className="text-[11px] text-slate-500">
-                    Max file size 32 MB · File never executed locally · Hashes computed securely
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Supports PE, ELF, scripts (.ps1, .sh, .py), Office documents up to 32 MB
                   </p>
                 </div>
               )}
             </div>
+
+            {/* SOC Analyst Attribution Field */}
+            <div className="mb-4 p-3 rounded-xl bg-slate-950/80 border border-slate-800">
+              <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-cyan-400" />
+                <span>SOC Analyst Attribution:</span>
+              </label>
+              <input
+                type="text"
+                value={analystName}
+                onChange={(e) => setAnalystName(e.target.value)}
+                placeholder="Enter SOC analyst name (e.g., SOC Analyst)..."
+                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-cyan-300 font-mono focus:outline-none focus:border-cyan-500 w-full"
+              />
+            </div>
+
+            <p className="text-xs text-slate-300 mb-3 leading-relaxed">
+              Select where and how this binary sample should be evaluated:
+            </p>
+
+            {/* Target Options */}
+            <div className="space-y-2.5">
+              {/* Option 1: External Threat Intel */}
+              <div
+                onClick={() => setDetonationTarget('threat_intel')}
+                className={`p-3 rounded-xl border transition-all cursor-pointer flex items-start gap-3 ${
+                  detonationTarget === 'threat_intel'
+                    ? 'border-cyan-400 bg-cyan-950/40 shadow-[0_0_15px_rgba(34,211,238,0.15)] ring-1 ring-cyan-500/50'
+                    : 'border-slate-800 bg-slate-950/60 hover:border-slate-700'
+                }`}
+              >
+                <div className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                  detonationTarget === 'threat_intel' ? 'border-cyan-400 bg-cyan-500 text-slate-950' : 'border-slate-600'
+                }`}>
+                  {detonationTarget === 'threat_intel' && <div className="w-1.5 h-1.5 rounded-full bg-slate-950" />}
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
+                      <Globe className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>7-Way Threat Intelligence Feeds</span>
+                    </span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800/60">
+                      Standard
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
+                    Calculates SHA256/MD5 hashes locally and queries VirusTotal, Falcon Sandbox, MalwareBazaar, and OTX without exposing confidential binary contents.
+                  </p>
+                </div>
+              </div>
+
+              {/* Option 2: In-House Air-Gapped Sandbox */}
+              <div
+                onClick={() => setDetonationTarget('in_house_sandbox')}
+                className={`p-3 rounded-xl border transition-all cursor-pointer flex items-start gap-3 ${
+                  detonationTarget === 'in_house_sandbox'
+                    ? 'border-emerald-400 bg-emerald-950/40 shadow-[0_0_15px_rgba(16,185,129,0.15)] ring-1 ring-emerald-500/50'
+                    : 'border-slate-800 bg-slate-950/60 hover:border-slate-700'
+                }`}
+              >
+                <div className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                  detonationTarget === 'in_house_sandbox' ? 'border-emerald-400 bg-emerald-500 text-slate-950' : 'border-slate-600'
+                }`}>
+                  {detonationTarget === 'in_house_sandbox' && <div className="w-1.5 h-1.5 rounded-full bg-slate-950" />}
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
+                      <Server className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>In-House Air-Gapped Sandbox (CAPE / Cuckoo VM)</span>
+                    </span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/60">
+                      OPSEC Safe
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
+                    Executes binary in private isolated microVM. Captures process hollowing, API hooks, registry tampering, and network beacons while bypassing all third-party public clouds.
+                  </p>
+                </div>
+              </div>
+
+              {/* Option 3: Dual-Track */}
+              <div
+                onClick={() => setDetonationTarget('dual_track')}
+                className={`p-3 rounded-xl border transition-all cursor-pointer flex items-start gap-3 ${
+                  detonationTarget === 'dual_track'
+                    ? 'border-purple-400 bg-purple-950/40 shadow-[0_0_15px_rgba(168,85,247,0.15)] ring-1 ring-purple-500/50'
+                    : 'border-slate-800 bg-slate-950/60 hover:border-slate-700'
+                }`}
+              >
+                <div className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                  detonationTarget === 'dual_track' ? 'border-purple-400 bg-purple-500 text-slate-950' : 'border-slate-600'
+                }`}>
+                  {detonationTarget === 'dual_track' && <div className="w-1.5 h-1.5 rounded-full bg-slate-950" />}
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
+                      <Terminal className="w-3.5 h-3.5 text-purple-400" />
+                      <span>Dual-Track Comprehensive Execution</span>
+                    </span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800/60">
+                      Deep Triage
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
+                    Forks execution simultaneously into both the external Threat Intelligence network and private in-house sandbox for complete cross-validation.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Guest VM Environment Selection when sandbox is selected */}
+            {(detonationTarget === 'in_house_sandbox' || detonationTarget === 'dual_track') && (
+              <div className="mt-3.5 p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
+                <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider">
+                  Guest VM Detonation Profile:
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {[
+                    { id: 'win10_x64', label: 'Win 10 Pro 22H2', desc: 'Enterprise EDR Active' },
+                    { id: 'win11_x64', label: 'Win 11 x64 Enterprise', desc: 'Office 365 + PS7' },
+                    { id: 'ubuntu_x64', label: 'Ubuntu 22.04 LTS', desc: 'Linux ELF / Sh Trace' }
+                  ].map((env) => (
+                    <button
+                      type="button"
+                      key={env.id}
+                      onClick={() => setGuestOS(env.id as SandboxGuestOS)}
+                      className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                        guestOS === env.id
+                          ? 'border-cyan-400 bg-cyan-950/60 text-white ring-1 ring-cyan-500/50'
+                          : 'border-slate-800 bg-slate-900/50 text-slate-400 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="text-xs font-bold">{env.label}</div>
+                      <div className="text-[10px] text-slate-400">{env.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDetonationModal(false);
+                  setFileToDetonate(null);
+                }}
+                className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDetonationConfirm}
+                className="px-5 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 text-xs font-bold transition-all shadow-[0_0_20px_rgba(34,211,238,0.3)] flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>Execute Analysis</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-        )}
-      </form>
+        </div>,
+        document.body
+      )}
 
       {/* Mandatory SOC Analyst Name Collection Modal */}
       {showAnalystModal && (

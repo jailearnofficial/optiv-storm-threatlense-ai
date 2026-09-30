@@ -20,6 +20,7 @@ export function calculateRuleScore(providers: ProviderResult[], totalQueriedCoun
     abuseipdb: 10,
     urlscan: 5,
     alienvault_otx: 5,
+    in_house_sandbox: 25,
   };
 
   const scores: Record<string, number> = {};
@@ -100,6 +101,13 @@ export function calculateRuleScore(providers: ProviderResult[], totalQueriedCoun
         else if (pulses >= 3) providerScore0to100 = 65;
         else if (pulses >= 1) providerScore0to100 = 35;
         else providerScore0to100 = 0;
+        break;
+      }
+
+      case 'in_house_sandbox': {
+        const threatScore = p.score.threat_score ?? 0;
+        const mal = p.score.malicious ? 100 : 0;
+        providerScore0to100 = Math.max(threatScore, mal);
         break;
       }
 

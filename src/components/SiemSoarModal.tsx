@@ -135,7 +135,7 @@ export const SiemSoarModal: React.FC<SiemSoarModalProps> = ({
   onClose,
   onConnectorsUpdated
 }) => {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState<'connectors' | 'webhook' | 'rules' | 'telemetry'>('connectors');
 
   // Load connectors from localStorage; purge legacy mock data so it starts completely empty by default
@@ -196,7 +196,7 @@ export const SiemSoarModal: React.FC<SiemSoarModalProps> = ({
     }
   }, [connectors, onConnectorsUpdated]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !isAdmin) return null;
 
   const handleCopy = (text: string, keyName: string) => {
     navigator.clipboard.writeText(text);

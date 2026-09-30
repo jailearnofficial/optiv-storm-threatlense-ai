@@ -133,6 +133,71 @@ export interface ProviderResult {
   vt_graph?: VirusTotalGraphData;
   ha_details?: HybridAnalysisDetails;
   otx_details?: AlienVaultOTXDetails;
+  sandbox_details?: InHouseSandboxReport;
+}
+
+export type SandboxGuestOS = 'win10_x64' | 'win11_x64' | 'ubuntu_x64';
+export type DetonationTarget = 'threat_intel' | 'in_house_sandbox' | 'dual_track';
+
+export interface InHouseSandboxProcessNode {
+  pid: number;
+  ppid: number;
+  process_name: string;
+  command_line: string;
+  integrity: string;
+  injected: boolean;
+  spawned_threads: number;
+}
+
+export interface InHouseSandboxNetworkBeacon {
+  protocol: 'TCP' | 'UDP' | 'DNS' | 'HTTP' | 'HTTPS';
+  dest_ip: string;
+  dest_port: number;
+  domain?: string;
+  uri?: string;
+  bytes_sent: number;
+  bytes_recv: number;
+}
+
+export interface InHouseSandboxArtifact {
+  path: string;
+  action: 'created' | 'modified' | 'deleted' | 'read';
+  type: 'file' | 'registry_key' | 'mutex';
+}
+
+export interface InHouseSandboxReport {
+  job_id: string;
+  status: 'completed' | 'running' | 'failed';
+  detonation_time_seconds: number;
+  guest_os: SandboxGuestOS;
+  guest_os_label: string;
+  environment_isolation: string;
+  analysis_timestamp: string;
+  threat_score: number;
+  verdict: 'Malicious' | 'Suspicious' | 'Clean' | 'Inconclusive';
+  sample_info: {
+    original_name: string;
+    file_size_bytes: number;
+    md5: string;
+    sha1: string;
+    sha256: string;
+    mime_type: string;
+    architecture: string;
+    entropy: number;
+  };
+  behavioral_summary: {
+    process_injections_detected: number;
+    evasion_techniques: string[];
+    dropped_files: string[];
+    tampered_registry_keys: string[];
+    created_mutexes: string[];
+    network_connections: number;
+    dns_queries: string[];
+  };
+  process_tree: InHouseSandboxProcessNode[];
+  network_beacons: InHouseSandboxNetworkBeacon[];
+  filesystem_artifacts: InHouseSandboxArtifact[];
+  mitre_attack: HAMitreTechnique[];
 }
 
 export interface OTXPulse {

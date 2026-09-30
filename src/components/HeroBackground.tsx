@@ -1,7 +1,11 @@
 import React, { useEffect, useRef } from 'react';
+import { useTheme } from '../context/ThemeContext.js';
 
 export const HeroBackground: React.FC = () => {
+  const { theme } = useTheme();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const themeRef = useRef(theme);
+  themeRef.current = theme;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -46,6 +50,7 @@ export const HeroBackground: React.FC = () => {
     let radarAngle = 0;
 
     const render = () => {
+      const isLight = themeRef.current === 'light';
       ctx.clearRect(0, 0, width, height);
 
       // Faint radial background gradient
@@ -57,9 +62,15 @@ export const HeroBackground: React.FC = () => {
         height * 0.5,
         width * 0.8
       );
-      bgGrad.addColorStop(0, 'rgba(34, 211, 238, 0.04)');
-      bgGrad.addColorStop(0.5, 'rgba(139, 92, 246, 0.02)');
-      bgGrad.addColorStop(1, 'rgba(10, 14, 23, 0)');
+      if (isLight) {
+        bgGrad.addColorStop(0, 'rgba(6, 182, 212, 0.08)');
+        bgGrad.addColorStop(0.5, 'rgba(99, 102, 241, 0.04)');
+        bgGrad.addColorStop(1, 'rgba(248, 250, 252, 0)');
+      } else {
+        bgGrad.addColorStop(0, 'rgba(34, 211, 238, 0.04)');
+        bgGrad.addColorStop(0.5, 'rgba(139, 92, 246, 0.02)');
+        bgGrad.addColorStop(1, 'rgba(10, 14, 23, 0)');
+      }
       ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, width, height);
 
@@ -83,13 +94,13 @@ export const HeroBackground: React.FC = () => {
         radarCenterY,
         radarRadius
       );
-      sweepGrad.addColorStop(0, 'rgba(34, 211, 238, 0.07)');
-      sweepGrad.addColorStop(1, 'rgba(34, 211, 238, 0.0)');
+      sweepGrad.addColorStop(0, isLight ? 'rgba(6, 182, 212, 0.10)' : 'rgba(34, 211, 238, 0.07)');
+      sweepGrad.addColorStop(1, 'rgba(6, 182, 212, 0)');
       ctx.fillStyle = sweepGrad;
       ctx.fill();
 
       // Faint concentric range rings
-      ctx.strokeStyle = 'rgba(34, 211, 238, 0.03)';
+      ctx.strokeStyle = isLight ? 'rgba(148, 163, 184, 0.20)' : 'rgba(34, 211, 238, 0.03)';
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.arc(radarCenterX, radarCenterY, radarRadius * 0.33, 0, Math.PI * 2);
@@ -118,7 +129,7 @@ export const HeroBackground: React.FC = () => {
           const dist = Math.sqrt(dx * dx + dy * dy);
           if (dist < 110) {
             const alpha = (1 - dist / 110) * 0.08;
-            ctx.strokeStyle = `rgba(34, 211, 238, ${alpha})`;
+            ctx.strokeStyle = isLight ? `rgba(100, 116, 139, ${alpha * 1.5})` : `rgba(34, 211, 238, ${alpha})`;
             ctx.lineWidth = 0.7;
             ctx.beginPath();
             ctx.moveTo(n.x, n.y);
@@ -129,7 +140,7 @@ export const HeroBackground: React.FC = () => {
 
         // Draw node
         const currentAlpha = 0.15 + Math.sin(n.pulse) * 0.1;
-        ctx.fillStyle = `rgba(34, 211, 238, ${currentAlpha})`;
+        ctx.fillStyle = isLight ? `rgba(8, 145, 178, ${currentAlpha * 1.5})` : `rgba(34, 211, 238, ${currentAlpha})`;
         ctx.beginPath();
         ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
         ctx.fill();

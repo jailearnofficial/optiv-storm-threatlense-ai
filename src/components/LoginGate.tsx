@@ -15,11 +15,15 @@ import {
   Mail,
   Send,
   KeyRound,
-  CheckCircle2
+  CheckCircle2,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { useAuth, isAllowedEmail } from '../context/AuthContext.js';
+import { useTheme } from '../context/ThemeContext.js';
 
 export const LoginGate: React.FC = () => {
+  const { theme, toggleTheme } = useTheme();
   const {
     signInWithGoogle,
     signInWithEmail,
@@ -125,9 +129,31 @@ export const LoginGate: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-[11px] font-mono text-cyan-400">
-          <ShieldCheck className="w-3 h-3 text-cyan-400" />
-          <span>SOC ANALYST ACCESS</span>
+        <div className="flex items-center gap-2">
+          {/* Theme Toggle Button */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-[11px] font-mono text-slate-300 hover:text-cyan-400 transition-colors cursor-pointer"
+            title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+          >
+            {theme === 'light' ? (
+              <>
+                <Sun className="w-3.5 h-3.5 text-amber-500" />
+                <span>Light</span>
+              </>
+            ) : (
+              <>
+                <Moon className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Dark</span>
+              </>
+            )}
+          </button>
+
+          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-[11px] font-mono text-cyan-400">
+            <ShieldCheck className="w-3 h-3 text-cyan-400" />
+            <span>SOC ANALYST ACCESS</span>
+          </div>
         </div>
       </header>
 

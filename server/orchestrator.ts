@@ -21,14 +21,22 @@ import {
   UrlscanAdapter,
   AlienVaultOTXAdapter
 } from './providers/adapters.js';
+import { InHouseSandboxAdapter, SandboxGuestOS } from './providers/inHouseSandbox.js';
 import { calculateRuleScore } from './scoring.js';
 import { db } from './db.js';
 import { findKnownSample } from './providers/mockFeeds.js';
 
+export interface RunLookupOptions {
+  detonationTarget?: 'threat_intel' | 'in_house_sandbox' | 'dual_track';
+  guestOS?: SandboxGuestOS;
+}
+
 export class Orchestrator {
   private adapters: ProviderAdapter[];
+  private sandboxAdapter: InHouseSandboxAdapter;
 
   constructor() {
+    this.sandboxAdapter = new InHouseSandboxAdapter();
     this.adapters = [
       new VirusTotalAdapter(),
       new HybridAnalysisAdapter(),
@@ -36,7 +44,8 @@ export class Orchestrator {
       new AbuseIPDBAdapter(),
       new URLhausAdapter(),
       new UrlscanAdapter(),
-      new AlienVaultOTXAdapter()
+      new AlienVaultOTXAdapter(),
+      this.sandboxAdapter
     ];
   }
 
@@ -46,7 +55,8 @@ export class Orchestrator {
     bypassCache = false,
     onProgress?: (result: ProviderResult) => void,
     analystName?: string,
-    filePayload?: FilePayload
+    filePayload?: FilePayload,
+    options?: RunLookupOptions
   ): Promise<EvidenceObject> {
     // Check 24-hour strict retention cache per indicator unless bypassCache is requested
     // If an analyst searches for the same hash, domain, or URL within the 24-hour retention window,
@@ -90,13 +100,35 @@ export class Orchestrator {
       }
     }
 
-    // Determine which adapters support this indicator type
-    const activeAdapters = this.adapters.filter((a) => a.supports(type));
+    // Determine which adapters support this indicator type and match detonation target routing
+    let activeAdapters = this.adapters.filter((a) => a.supports(type));
+
+    const detonationTarget = options?.detonationTarget || 'threat_intel';
+    if (filePayload) {
+      if (detonationTarget === 'in_house_sandbox') {
+        // Air-gapped in-house detonation only: bypass external third-party feeds
+        activeAdapters = activeAdapters.filter((a) => a.name === 'in_house_sandbox');
+      } else if (detonationTarget === 'threat_intel') {
+        // Standard external threat intelligence network: exclude in-house sandbox
+        activeAdapters = activeAdapters.filter((a) => a.name !== 'in_house_sandbox');
+      }
+      // If 'dual_track', run BOTH external threat intelligence AND in-house sandbox in parallel
+    } else {
+      // For string IOC searches (IP, Domain, URL, standalone hash search), default to standard TI feeds unless requested
+      if (detonationTarget !== 'in_house_sandbox' && detonationTarget !== 'dual_track') {
+        activeAdapters = activeAdapters.filter((a) => a.name !== 'in_house_sandbox');
+      }
+    }
 
     // Parallel fan-out with per-provider timeout handled in adapters
     const promises = activeAdapters.map(async (adapter) => {
       try {
-        const result = await adapter.lookup(indicator, type, filePayload);
+        const result = (adapter.name === 'in_house_sandbox')
+          ? await (adapter as InHouseSandboxAdapter).lookup(indicator, type, filePayload, {
+              guest_os: options?.guestOS,
+              detonation_target: detonationTarget
+            })
+          : await adapter.lookup(indicator, type, filePayload);
         if (onProgress) onProgress(result);
         return result;
       } catch (err: any) {
@@ -171,6 +203,29 @@ export class Orchestrator {
         if (res.name === 'urlscan') {
           if (res.key_facts?.server_ip) {
             related.ips.push(res.key_facts.server_ip);
+          }
+        }
+        if (res.name === 'in_house_sandbox' && res.raw) {
+          const sbReport = res.raw;
+          if (Array.isArray(sbReport.mitre_attack)) {
+            for (const m of sbReport.mitre_attack) {
+              mitreHints.push({
+                technique_id: m.technique_id,
+                provider: 'in-house-sandbox',
+                evidence: m.evidence || `Observed via In-House Guest VM runtime execution: ${m.technique_name || m.tactic}`
+              });
+            }
+          }
+          if (Array.isArray(sbReport.network_beacons)) {
+            for (const b of sbReport.network_beacons) {
+              if (b.dest_ip && !b.dest_ip.startsWith('8.8.')) related.ips.push(b.dest_ip);
+              if (b.domain) related.domains.push(b.domain);
+            }
+          }
+          if (Array.isArray(sbReport.behavioral_summary?.dropped_files)) {
+            for (const f of sbReport.behavioral_summary.dropped_files) {
+              // file names or paths
+            }
           }
         }
         if (res.name === 'abuseipdb') {

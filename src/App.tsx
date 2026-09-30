@@ -18,6 +18,7 @@ import { IocTable } from './components/IocTable.js';
 import { HistoryDrawer } from './components/HistoryDrawer.js';
 import { ReportModal } from './components/ReportModal.js';
 import { SiemSoarModal } from './components/SiemSoarModal.js';
+import { ApiKeyModal } from './components/ApiKeyModal.js';
 import { VirusTotalDeepDive } from './components/VirusTotalDeepDive.js';
 import { HybridAnalysisDeepDive } from './components/HybridAnalysisDeepDive.js';
 import { AlienVaultOTXDeepDive } from './components/AlienVaultOTXDeepDive.js';
@@ -26,8 +27,10 @@ import { NetworkEnrichmentPanel } from './components/NetworkEnrichmentPanel.js';
 import { DetectionRulesPanel } from './components/DetectionRulesPanel.js';
 import { InvestigationHistoryFeed } from './components/InvestigationHistoryFeed.js';
 import { CyberWarfareHUD } from './components/cyber/CyberWarfareHUD.js';
+import { AgenticWorkspace } from './components/agentic/AgenticWorkspace.js';
 import { LoginGate } from './components/LoginGate.js';
 import { AuthProvider, useAuth } from './context/AuthContext.js';
+import { useTheme } from './context/ThemeContext.js';
 import { authenticatedFetch } from './lib/apiClient.js';
 import {
   EvidenceObject,
@@ -39,7 +42,8 @@ import {
 import { FileText, ShieldAlert, CheckCircle2, Download, AlertCircle, Network, Cpu, Radio, ChevronDown, ChevronUp, Lock, Database, RefreshCw, Globe, FileCode, Sparkles } from 'lucide-react';
 
 function Dashboard() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, isAdmin, loading: authLoading } = useAuth();
+  const { theme } = useTheme();
   const [indicator, setIndicator] = useState<string>('');
   const [selectedType, setSelectedType] = useState<string>('auto');
   const [analystName, setAnalystName] = useState<string>('');
@@ -55,12 +59,15 @@ function Dashboard() {
   const [showNetworkEnrichment, setShowNetworkEnrichment] = useState<boolean>(true);
   const [showDetectionRules, setShowDetectionRules] = useState<boolean>(true);
   const [showCyberWarfare, setShowCyberWarfare] = useState<boolean>(true);
+  const [isAgenticMode, setIsAgenticMode] = useState<boolean>(false);
+  const [isFileModalOpen, setIsFileModalOpen] = useState<boolean>(false);
 
   // Modals & Drawers state
   const [inspectProvider, setInspectProvider] = useState<ProviderResult | null>(null);
   const [historyOpen, setHistoryOpen] = useState<boolean>(false);
   const [reportModalId, setReportModalId] = useState<string | null>(null);
   const [siemModalOpen, setSiemModalOpen] = useState<boolean>(false);
+  const [apiKeyModalOpen, setApiKeyModalOpen] = useState<boolean>(false);
   const [activeSiemCount, setActiveSiemCount] = useState<number>(() => {
     try {
       const stored = localStorage.getItem('threatlense_siem_connectors');
@@ -173,7 +180,8 @@ function Dashboard() {
     submitMode = false,
     file?: File,
     customAnalystName?: string,
-    forceRefresh = false
+    forceRefresh = false,
+    detonationOptions?: { detonationTarget: 'threat_intel' | 'in_house_sandbox' | 'dual_track'; guestOS: 'win10_x64' | 'win11_x64' | 'ubuntu_x64' }
   ) => {
     const activeAnalyst = (customAnalystName !== undefined ? customAnalystName : analystName).trim();
     setLookupLoading(true);
@@ -190,6 +198,12 @@ function Dashboard() {
         }
         if (forceRefresh) {
           formData.append('force_refresh', 'true');
+        }
+        if (detonationOptions?.detonationTarget) {
+          formData.append('detonation_target', detonationOptions.detonationTarget);
+        }
+        if (detonationOptions?.guestOS) {
+          formData.append('guest_os', detonationOptions.guestOS);
         }
         const res = await authenticatedFetch('/api/submit', {
           method: 'POST',
@@ -413,7 +427,7 @@ function Dashboard() {
   }
 
   return (
-    <div className="relative min-h-screen bg-[#0A0E17] text-slate-100 flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200">
+    <div className={`relative min-h-screen ${theme === 'light' ? 'bg-[#f8fafc] text-slate-900' : 'bg-[#0A0E17] text-slate-100'} flex flex-col selection:bg-cyan-500/30 selection:text-cyan-800 transition-colors duration-200`}>
       {/* Background canvas */}
       <HeroBackground />
 
@@ -421,16 +435,23 @@ function Dashboard() {
       <Header
         onOpenHistory={() => setHistoryOpen(true)}
         onOpenSiemSoar={() => setSiemModalOpen(true)}
+        onOpenApiKeyModal={() => setApiKeyModalOpen(true)}
         onResetToFreshWorkspace={handleResetToFreshWorkspace}
         activeSiemCount={activeSiemCount}
         providerHealth={providerHealth}
         onToggleCyberWarfare={() => setShowCyberWarfare(!showCyberWarfare)}
         isCyberWarfareActive={showCyberWarfare}
+        isAgenticMode={isAgenticMode}
+        onToggleAgenticMode={() => setIsAgenticMode(!isAgenticMode)}
       />
 
-      {/* Main Content Area (Classic SOC View) */}
-      <main className="flex-1 max-w-7xl w-full mx-auto pb-16">
-        {/* Search Console */}
+      {/* Autonomous Agentic AI Workspace vs. Classic SOC View */}
+      {isAgenticMode ? (
+        <AgenticWorkspace onSwitchToClassic={() => setIsAgenticMode(false)} />
+      ) : (
+        /* Main Content Area (Classic SOC View - Untouched) */
+        <main className="flex-1 max-w-7xl w-full mx-auto pb-16">
+          {/* Search Console */}
         <SearchConsole
           indicator={indicator}
           setIndicator={setIndicator}
@@ -440,6 +461,7 @@ function Dashboard() {
           loading={lookupLoading}
           analystName={analystName}
           setAnalystName={setAnalystName}
+          onFileModalOpenChange={setIsFileModalOpen}
         />
 
         {/* Error Notification Banner */}
@@ -484,8 +506,8 @@ function Dashboard() {
           </div>
         )}
 
-        {/* Live 24-Hour Investigation History & Audit Trail (Visible to all users on login) */}
-        {!evidence && !lookupLoading && (
+        {/* Live 24-Hour Investigation History & Audit Trail (Hidden when viewing evidence or when Browse File modal is open) */}
+        {!evidence && !lookupLoading && !isFileModalOpen && (
           <InvestigationHistoryFeed
             historyList={historyList}
             loading={historyLoading}
@@ -872,6 +894,7 @@ function Dashboard() {
           />
         )}
       </main>
+      )}
 
       {/* Provider Details Modal Drawer */}
       <ProviderDetailModal
@@ -893,12 +916,22 @@ function Dashboard() {
         onClose={() => setReportModalId(null)}
       />
 
-      {/* Enterprise SIEM & SOAR Integration Hub Modal */}
-      <SiemSoarModal
-        isOpen={siemModalOpen}
-        onClose={() => setSiemModalOpen(false)}
-        onConnectorsUpdated={setActiveSiemCount}
-      />
+      {/* Enterprise SIEM & SOAR Integration Hub Modal (Admin Only) */}
+      {isAdmin && (
+        <SiemSoarModal
+          isOpen={siemModalOpen}
+          onClose={() => setSiemModalOpen(false)}
+          onConnectorsUpdated={setActiveSiemCount}
+        />
+      )}
+
+      {/* Admin API Key Generator & Management Modal (Admin Only) */}
+      {isAdmin && (
+        <ApiKeyModal
+          isOpen={apiKeyModalOpen}
+          onClose={() => setApiKeyModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

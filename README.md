@@ -23,8 +23,11 @@ OPTIV S.T.O.R.M ThreatLense AI aggregates and correlates live threat telemetry a
 - **Enterprise Forensic Reporting**:
   - Print-ready and downloadable PDF / HTML reports branded for incident response workflows.
   - One-click export of verified defanged IOCs in **STIX 2.1 JSON** and **CSV** (with RFC-compliant sanitization against formula injection).
-- **Secure File Detonation & Analysis**:
-  - Drag-and-drop file inspection that computes cryptographic digests (MD5, SHA-1, SHA-256) in memory with immediate buffer eviction.
+- **Secure File Detonation & Routing Architecture**:
+  - **Dynamic Detonation Modal**: When an analyst drops or uploads a suspicious binary or script, ThreatLense AI prompts with a detonation target chooser:
+    1. **External Threat Intelligence Network**: Computes cryptographic digests (MD5, SHA-1, SHA-256) in memory and queries VirusTotal, Falcon Sandbox, and MalwareBazaar without releasing confidential binaries.
+    2. **In-House Isolated Air-Gapped Sandbox**: Directs samples to private guest VMs (Windows 10 Pro 22H2, Windows 11 Enterprise with Office 365, or Ubuntu 22.04 LTS). Traces process hollowing, memory injections, registry persistence, and network beacons while guaranteeing zero third-party cloud leakage.
+    3. **Dual-Track Hybrid Detonation**: Forks execution simultaneously into both external threat feeds and the in-house sandbox for complete cross-validation.
 
 ---
 

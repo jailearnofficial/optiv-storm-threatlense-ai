@@ -10,6 +10,7 @@ import { getProviderHealth } from './config.js';
 import { detectIndicatorType } from './detect.js';
 import { orchestrator } from './orchestrator.js';
 import { runGeminiTriage } from './ai/gemini.js';
+import { runAgenticInvestigation } from './ai/agenticHunter.js';
 import { db } from './db.js';
 import { generateHtmlReport, generateIOCsCsv, generateSTIXBundle } from './report/generator.js';
 import { requireFirebaseAuth } from './auth.js';
@@ -213,6 +214,8 @@ export function createApp() {
     try {
       const analystName = sanitizeAnalystName(req.body.analyst_name);
       const bypassCache = req.body.bypass_cache === 'true' || req.body.force_refresh === 'true';
+      const detonationTarget = (req.body.detonation_target as any) || 'threat_intel';
+      const guestOS = (req.body.guest_os as any) || 'win10_x64';
 
       if (req.file) {
         const buffer = req.file.buffer;
@@ -221,7 +224,8 @@ export function createApp() {
         const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
 
         // Check if this hash was already analyzed within the 24-hour retention window
-        if (!bypassCache) {
+        // (Only cache-hit if detonationTarget matches or is standard threat_intel)
+        if (!bypassCache && detonationTarget === 'threat_intel') {
           const cachedMatch = db.findCachedLookup(sha256, 'hash');
           if (cachedMatch) {
             console.log(`[OPTIV 24h File Cache HIT] File SHA256 "${sha256}" retrieved from 24h cache.`);
@@ -237,6 +241,7 @@ export function createApp() {
               analyst_name: cachedEvidence.analyst_name,
               cached: true,
               cache_age_ms: cachedMatch.ageMs,
+              detonation_target: detonationTarget,
               file_info: {
                 original_name: req.file.originalname,
                 size_bytes: req.file.size,
@@ -252,13 +257,17 @@ export function createApp() {
         const evidence = await orchestrator.runLookup(
           sha256,
           'hash',
-          true, // Live parsing to providers for new file
+          true, // Live parsing to providers for new file or sandbox detonation
           undefined,
           analystName,
           {
             buffer,
             originalname: req.file.originalname,
             mimetype: req.file.mimetype
+          },
+          {
+            detonationTarget,
+            guestOS
           }
         );
 
@@ -279,6 +288,8 @@ export function createApp() {
           lookup_id: evidence.id,
           analyst_name: evidence.analyst_name,
           cached: false,
+          detonation_target: detonationTarget,
+          guest_os: guestOS,
           file_info: {
             original_name: req.file.originalname,
             size_bytes: req.file.size,
@@ -548,6 +559,25 @@ export function createApp() {
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename="STIX_${lookup.type}_${verdict.id}.json"`);
       return res.json(stix);
+    }
+  });
+
+  // 10. Autonomous Agentic AI SOC Investigation
+  app.post('/api/agent/investigate', async (req: Request, res: Response) => {
+    try {
+      const { indicator, scenarioId, analystName } = req.body || {};
+      const target = (typeof indicator === 'string' && indicator.trim().length > 0)
+        ? indicator.trim()
+        : '194.26.29.112';
+      const cleanAnalyst = sanitizeAnalystName(analystName) || 'Jai Kumar Singh P';
+
+      const result = await runAgenticInvestigation(target, scenarioId, cleanAnalyst);
+      return res.json(result);
+    } catch (err: any) {
+      console.error('Agentic investigation error:', err);
+      return res.status(500).json({
+        error: { code: 'AGENTIC_MISSION_FAILED', message: err.message || 'Agentic investigation failed' }
+      });
     }
   });
 

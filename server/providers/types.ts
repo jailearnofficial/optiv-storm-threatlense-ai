@@ -12,7 +12,8 @@ export type ProviderName =
   | 'abuseipdb'
   | 'urlhaus'
   | 'urlscan'
-  | 'alienvault_otx';
+  | 'alienvault_otx'
+  | 'in_house_sandbox';
 
 export type ProviderStatus = 'ok' | 'not_found' | 'rate_limited' | 'no_data' | 'error';
 
@@ -212,6 +213,7 @@ export interface ProviderResult {
   vt_graph?: VirusTotalGraphData;
   ha_details?: HybridAnalysisDetails;
   otx_details?: AlienVaultOTXDetails;
+  sandbox_details?: any;
   error?: string;
 }
 

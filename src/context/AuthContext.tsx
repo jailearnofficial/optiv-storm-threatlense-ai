@@ -24,10 +24,39 @@ export function isAllowedEmail(email?: string | null): boolean {
 
 export const isOptivEmail = isAllowedEmail;
 
+/**
+ * Strict RBAC Check:
+ * Only analyst "jai kumar singh p" via Sign in with Google is Admin.
+ * All other accounts / methods are Analysts.
+ */
+export function checkIsAdmin(currentUser: User | null): boolean {
+  if (!currentUser) return false;
+
+  // 1. Must be authenticated via Google provider
+  const isGoogle = currentUser.providerData?.some(
+    (p) => p.providerId === 'google.com'
+  );
+  if (!isGoogle) return false;
+
+  // 2. Identity match: "jai kumar singh p" or user email "jai.learn.official@gmail.com"
+  const email = (currentUser.email || '').trim().toLowerCase();
+  const displayName = (currentUser.displayName || '').trim().toLowerCase();
+
+  const isTargetEmail = email === 'jai.learn.official@gmail.com';
+  const isTargetName =
+    displayName === 'jai kumar singh p' ||
+    displayName.includes('jai kumar singh') ||
+    displayName.includes('jai kumar');
+
+  return isTargetEmail || isTargetName;
+}
+
 const EMAIL_LINK_KEY = 'threatlense_email_for_signin';
 
 interface AuthContextType {
   user: User | null;
+  isAdmin: boolean;
+  userRole: 'Admin' | 'Analyst';
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
   sendEmailSignInLink: (email: string) => Promise<void>;
@@ -43,6 +72,8 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
+  isAdmin: false,
+  userRole: 'Analyst',
   loading: true,
   signInWithGoogle: async () => {},
   sendEmailSignInLink: async () => {},
@@ -111,7 +142,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } else {
           setUser(currentUser);
           try {
-            await syncUserProfile(currentUser);
+            const adminStatus = checkIsAdmin(currentUser);
+            await syncUserProfile(currentUser, adminStatus ? 'Admin' : 'Analyst');
           } catch (e) {
             console.error('Failed to sync user profile:', e);
           }
@@ -141,7 +173,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           );
           return;
         }
-        await syncUserProfile(result.user);
+        const adminStatus = checkIsAdmin(result.user);
+        await syncUserProfile(result.user, adminStatus ? 'Admin' : 'Analyst');
       }
     } catch (err: unknown) {
       console.error('Google Authentication error:', err);
@@ -260,10 +293,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
   };
 
+  const isAdmin = checkIsAdmin(user);
+  const userRole: 'Admin' | 'Analyst' = isAdmin ? 'Admin' : 'Analyst';
+
   return (
     <AuthContext.Provider
       value={{
         user,
+        isAdmin,
+        userRole,
         loading,
         signInWithGoogle,
         sendEmailSignInLink,

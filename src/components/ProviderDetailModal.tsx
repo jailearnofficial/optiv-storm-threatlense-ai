@@ -12,7 +12,7 @@ export const ProviderDetailModal: React.FC<ProviderDetailModalProps> = ({
   onClose
 }) => {
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<'facts' | 'raw' | 'vt_graph' | 'ha_sandbox'>('facts');
+  const [activeTab, setActiveTab] = useState<'facts' | 'raw' | 'vt_graph' | 'ha_sandbox' | 'in_house_sandbox'>('facts');
 
   if (!provider) return null;
 
@@ -24,6 +24,8 @@ export const ProviderDetailModal: React.FC<ProviderDetailModalProps> = ({
 
   const hasVTDetails = Boolean(provider.vt_details || provider.vt_graph);
   const hasHADetails = Boolean(provider.ha_details);
+  const hasSandboxReport = Boolean(provider.name === 'in_house_sandbox' && provider.raw?.process_tree);
+  const sbReport = (provider.name === 'in_house_sandbox' ? provider.raw : null) as any;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150">
@@ -88,6 +90,20 @@ export const ProviderDetailModal: React.FC<ProviderDetailModalProps> = ({
             >
               <Cpu className="w-3.5 h-3.5 text-amber-400" />
               Falcon Sandbox & AV ({provider.ha_details?.threat_score}/100)
+            </button>
+          )}
+
+          {hasSandboxReport && (
+            <button
+              onClick={() => setActiveTab('in_house_sandbox')}
+              className={`pb-2 text-xs font-medium flex items-center gap-1.5 border-b-2 transition-colors cursor-pointer ${
+                activeTab === 'in_house_sandbox'
+                  ? 'border-emerald-400 text-emerald-300 font-bold'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <ShieldAlert className="w-3.5 h-3.5 text-emerald-400" />
+              Air-Gapped VM Detonation Trace ({sbReport?.threat_score}/100)
             </button>
           )}
 
@@ -303,6 +319,138 @@ export const ProviderDetailModal: React.FC<ProviderDetailModalProps> = ({
                         <p className="text-slate-400 text-[11px] leading-relaxed mt-1">
                           {m.evidence}
                         </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : activeTab === 'in_house_sandbox' && sbReport ? (
+            <div className="space-y-4">
+              {/* In-House Sandbox Banner */}
+              <div className="p-4 rounded-xl bg-slate-950/70 border border-emerald-500/40">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-slate-400 uppercase">Detonation Target:</span>
+                      <span className="text-xs font-mono font-bold text-emerald-300 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800/80">
+                        {sbReport.guest_os_label}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="text-xs text-slate-400">Environment Isolation:</span>
+                      <span className="text-xs text-slate-200 font-medium">{sbReport.environment_isolation}</span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs text-slate-400">Detonation Trace ID:</span>
+                      <span className="text-xs font-mono text-cyan-300">{sbReport.job_id}</span>
+                    </div>
+                  </div>
+                  <div className="text-right sm:border-l sm:border-slate-800 sm:pl-4">
+                    <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold block">Sandbox Threat Score</span>
+                    <div className="flex items-center gap-2 justify-end mt-0.5">
+                      <span className={`text-2xl font-black font-mono ${
+                        sbReport.threat_score >= 70 ? 'text-rose-400' : sbReport.threat_score >= 35 ? 'text-amber-400' : 'text-emerald-400'
+                      }`}>
+                        {sbReport.threat_score}
+                      </span>
+                      <span className="text-xs text-slate-500 font-mono">/ 100</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4 text-xs font-mono">
+                  <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                    <span className="text-slate-500 block text-[10px] uppercase">Entropy</span>
+                    <span className="text-slate-100 font-bold text-sm">{sbReport.sample_info?.entropy?.toFixed(2)} / 8.0</span>
+                    <span className="text-slate-400 text-[10px] block mt-0.5">{sbReport.sample_info?.entropy > 7.0 ? 'High (Packed/Encrypted)' : 'Normal distribution'}</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                    <span className="text-slate-500 block text-[10px] uppercase">Injections</span>
+                    <span className="text-rose-400 font-bold text-sm">{sbReport.behavioral_summary?.process_injections_detected} Detected</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                    <span className="text-slate-500 block text-[10px] uppercase">Network Beacons</span>
+                    <span className="text-cyan-300 font-bold text-sm">{sbReport.network_beacons?.length || 0} Outbound</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                    <span className="text-slate-500 block text-[10px] uppercase">Dropped Artifacts</span>
+                    <span className="text-amber-300 font-bold text-sm">{sbReport.filesystem_artifacts?.length || 0} Modified</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dynamic Process Execution Tree */}
+              {sbReport.process_tree && sbReport.process_tree.length > 0 && (
+                <div className="p-3.5 rounded-xl bg-slate-950/50 border border-slate-800">
+                  <h5 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5 flex items-center justify-between">
+                    <span>Dynamic Process Lineage & Spawns</span>
+                    <span className="text-slate-500 text-[11px] font-mono">{sbReport.process_tree.length} Processes Traced</span>
+                  </h5>
+                  <div className="space-y-2">
+                    {sbReport.process_tree.map((p: any, idx: number) => (
+                      <div key={idx} className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-xs">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="font-bold text-slate-100 flex items-center gap-1.5 font-mono">
+                            <span className="text-cyan-400">PID {p.pid}</span>
+                            <span className="text-slate-500">← PPID {p.ppid}</span>
+                            <span>{p.process_name}</span>
+                          </span>
+                          <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase ${
+                            p.injected ? 'bg-rose-950 text-rose-400 border border-rose-800' : 'bg-slate-800 text-slate-300'
+                          }`}>
+                            {p.injected ? 'INJECTED (HOLLOWED)' : `${p.integrity} Integrity`}
+                          </span>
+                        </div>
+                        <div className="bg-slate-950 p-2 rounded border border-slate-800/80 font-mono text-[11px] text-slate-300 break-all">
+                          {p.command_line}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Network Beacons */}
+              {sbReport.network_beacons && sbReport.network_beacons.length > 0 && (
+                <div className="p-3.5 rounded-xl bg-slate-950/50 border border-slate-800">
+                  <h5 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+                    Isolated Network Outbound Beacons & C2 Traffic
+                  </h5>
+                  <div className="space-y-1.5">
+                    {sbReport.network_beacons.map((b: any, idx: number) => (
+                      <div key={idx} className="p-2 rounded bg-slate-900 border border-slate-800 flex items-center justify-between text-xs font-mono">
+                        <div className="flex items-center gap-2">
+                          <span className="px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 text-[10px] font-bold">
+                            {b.protocol}
+                          </span>
+                          <span className="text-slate-200">{b.dest_ip}:{b.dest_port}</span>
+                          {b.domain && <span className="text-slate-400">({b.domain})</span>}
+                        </div>
+                        <span className="text-[11px] text-slate-400">
+                          Sent: {b.bytes_sent}B / Recv: {b.bytes_recv}B
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Filesystem & Registry Tampering */}
+              {sbReport.filesystem_artifacts && sbReport.filesystem_artifacts.length > 0 && (
+                <div className="p-3.5 rounded-xl bg-slate-950/50 border border-slate-800">
+                  <h5 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+                    Filesystem, Registry & Mutex Artifacts
+                  </h5>
+                  <div className="space-y-1.5">
+                    {sbReport.filesystem_artifacts.map((a: any, idx: number) => (
+                      <div key={idx} className="p-2 rounded bg-slate-900 border border-slate-800 flex items-center justify-between text-xs font-mono">
+                        <span className="text-slate-300 truncate max-w-[420px]">{a.path}</span>
+                        <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
+                          a.action === 'created' ? 'bg-amber-950 text-amber-300 border border-amber-800' : 'bg-purple-950 text-purple-300 border border-purple-800'
+                        }`}>
+                          {a.type}: {a.action}
+                        </span>
                       </div>
                     ))}
                   </div>

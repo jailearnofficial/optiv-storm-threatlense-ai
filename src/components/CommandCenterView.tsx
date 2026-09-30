@@ -192,7 +192,8 @@ export const CommandCenterView: React.FC<CommandCenterViewProps> = ({
       { id: 'abuseipdb', name: 'AbuseIPDB', icon: Server, type: 'IP Telemetry' },
       { id: 'urlhaus', name: 'URLhaus', icon: Globe, type: 'Abuse Feeds' },
       { id: 'urlscan', name: 'Urlscan.io', icon: Radio, type: 'Web Scan' },
-      { id: 'malwarebazaar', name: 'MalwareBazaar', icon: Database, type: 'Signatures' }
+      { id: 'malwarebazaar', name: 'MalwareBazaar', icon: Database, type: 'Signatures' },
+      { id: 'in_house_sandbox', name: 'In-House Sandbox', icon: ShieldAlert, type: 'Air-Gapped VM' }
     ];
 
     const radius = 175; // px from center

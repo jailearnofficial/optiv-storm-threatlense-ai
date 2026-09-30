@@ -144,6 +144,24 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
             )}
           </div>
         )}
+
+        {provider.name === 'in_house_sandbox' && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800/80">
+              🛡️ Air-Gapped Dynamic Trace
+            </span>
+            {provider.key_facts?.threat_score && (
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-950 text-cyan-300 border border-cyan-800/60">
+                Score: {provider.key_facts.threat_score}
+              </span>
+            )}
+            {provider.key_facts?.guest_environment && (
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-950/60 text-purple-300 border border-purple-800/80">
+                VM: {provider.key_facts.guest_environment.split(' ')[0]}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Bottom tags & metrics */}

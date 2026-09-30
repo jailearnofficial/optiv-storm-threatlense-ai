@@ -100,6 +100,7 @@ Located at `server/providers/`:
 | **URLhaus** | Active malware distribution URLs | URL, Domain, Hash | Malware payloads, payload tags, URL status (online/offline) |
 | **MalwareBazaar** | Malware sample repository | Hash | Sample signatures, file type, delivery tags, ClamAV detections, reporter |
 | **urlscan.io** | Automated browser DOM analysis | URL, Domain, IP | Screenshot previews, HTTP transaction breakdown, DOM verdicts, malicious score |
+| **In-House Isolated Sandbox** | Private air-gapped VM execution | Hash (File Payload) | Process tree tracing, PID injection/hollowing, network C2 beacons, filesystem artifacts, Windows 10/11 & Ubuntu VM guest profiles |
 
 ### Parallel Execution Pattern
 ```typescript
@@ -261,9 +262,13 @@ Server-Sent Events (SSE) streaming lookup.
 - **Events**: `provider_update`, `complete`, `error`
 
 #### `POST /api/submit`
-File upload and URL submission analysis.
-- **Payload**: `multipart/form-data` with `file` or JSON `{ url: string }`
-- **Response**: Computes SHA-256, MD5, SHA-1, size, MIME type and initiates provider triage.
+File upload and URL submission analysis with detonation routing options.
+- **Payload**: `multipart/form-data` with:
+  - `file`: Suspicious binary / script payload
+  - `detonation_target`: `'threat_intel'` | `'in_house_sandbox'` | `'dual_track'` (default: `'threat_intel'`)
+  - `guest_os`: `'win10_x64'` | `'win11_x64'` | `'ubuntu_x64'` (default: `'win10_x64'`)
+  - `analyst_name`: Optional analyst attribution
+- **Response**: Computes SHA-256, MD5, SHA-1, size, MIME type and initiates provider triage or private VM detonation trace.
 
 #### `GET /api/lookup/:id`
 Retrieves stored lookup evidence and telemetry by lookup ID.
